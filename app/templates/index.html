@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    {% if books and books|length > 0 %}
+    <div class="row">
+        {% for book in books %}
+        <div class="col-md-4 mb-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">{{ book.title }}</h5>
+                    <p class="card-text">{{ book.description[:100] }}...</p>
+                    <a href="/book/{{ book.id }}" class="btn btn-primary">View Details</a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% elif auth_required %}
+    <div class="text-center">
+        <h3>Please log in or register to view your books</h3>
+        <a href="/registration" class="btn btn-primary">Register</a>
+        <a href="/login" class="btn btn-secondary">Log in</a>
+    </div>
+    {% else %}
+    <h3>Книг не найдено. <a href="/registration">Зарегистрируйтесь</a> или <a href="/login">войдите</a> для добавления
+        книг</h3>
+    {% endif %}
+</div>
+{% endblock %}
