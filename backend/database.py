@@ -66,10 +66,15 @@ def on_startup():
     create_db_and_tables()
 
 
+@app.get("/")
+async def index():
+    return {"ok": True}
+
+
 @app.post("/books/", response_model=BookPublic)
 async def create_book(book: BookCreate, session: SessionDep):
     db_book = Book.model_validate(book)
-    session.add(book)
+    session.add(db_book)
     session.commit()
     session.refresh(book)
     return book
@@ -93,9 +98,9 @@ async def read_book(book_id: int, session: SessionDep) -> Book:
     return book
 
 
-@app.delete("/heroes/{hero_id}")
-async def delete_book(hero_id: int, session: SessionDep):
-    book = session.get(Book, hero_id)
+@app.delete("/books/{book_id}")
+async def delete_book(book_id: int, session: SessionDep):
+    book = session.get(Book, book_id)
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
     session.delete(book)
