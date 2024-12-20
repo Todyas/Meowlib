@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Добавить книгу</h2>
+<form method="post" action="/add_book" enctype="multipart/form-data">
+    <div class="mb-3">
+        <label for="title" class="form-label">Название</label>
+        <input type="text" class="form-control" name="title" id="title" required>
+    </div>
+    <div class="mb-3">
+        <label for="author" class="form-label">Автор</label>
+        <input type="text" class="form-control" name="author" id="author" required>
+    </div>
+    <div class="mb-3">
+        <label for="description" class="form-label">Описание</label>
+        <textarea class="form-control" name="description" id="description" rows="3"></textarea>
+    </div>
+    <div class="mb-3">
+        <label for="book_file" class="form-label">Файл книги</label>
+        <input type="file" class="form-control" name="book_file" id="book_file" required>
+    </div>
+    <div class="mb-3">
+        <label for="cover_file" class="form-label">Обложка</label>
+        <input type="file" class="form-control" name="cover_file" id="cover_file" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Добавить</button>
+</form>
+{% endblock %}

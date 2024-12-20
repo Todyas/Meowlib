@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Регистрация</h2>
+<form method="post" action="/register">
+    <div class="mb-3">
+        <label for="login" class="form-label">Логин</label>
+        <input type="text" class="form-control" name="login" id="login" required>
+    </div>
+    <div class="mb-3">
+        <label for="email" class="form-label">E-mail</label>
+        <input type="email" class="form-control" name="email" id="email" required>
+    </div>
+    <div class="mb-3">
+        <label for="password" class="form-label">Пароль</label>
+        <input type="password" class="form-control" name="password" id="password" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Зарегистрироваться</button>
+</form>
+{% endblock %}
