@@ -1,3 +1,4 @@
+import bcrypt
 from fastapi import Depends, FastAPI, HTTPException
 from sqlmodel import create_engine, SQLModel, Session, select
 from typing import List, Optional
@@ -70,6 +71,11 @@ def on_startup():
 
 # ================================================================================
 
+def hash_password(password: str) -> str:
+    salt = bcrypt.gensalt()
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed_password.decode('utf-8')
+
 
 @app.post("/users/", response_model=UserRead)
 def create_user(*, session: Session = Depends(get_session), user: UserCreate):
@@ -77,9 +83,11 @@ def create_user(*, session: Session = Depends(get_session), user: UserCreate):
         User.username == user.username)).first()
     if db_user:
         raise HTTPException(
-            status_code=400, detail="Username already registered")
+            status_code=400, detail="Username already registered"
+        )
+    hashed_password = hash_password(user.password)
     user_obj = User(username=user.username, email=user.email,
-                    password_hash=user.password)
+                    password_hash=hashed_password)
     session.add(user_obj)
     session.commit()
     session.refresh(user_obj)
@@ -126,11 +134,27 @@ def delete_user(*, session: Session = Depends(get_session), user_id: int):
 
 @app.post("/books/", response_model=BookRead)
 def create_book(*, session: Session = Depends(get_session), book: BookCreate):
+    allowed_extensions = {".pdf", ".epub", ".mobi", ".txt",
+                          ".doc", ".docx", ".rtf"}  # Разрешённые форматы
+    file_extension = book.file_path.split(".")[-1].lower()
+
+    if f".{file_extension}" not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file format. Allowed formats are: {
+                ', '.join(allowed_extensions)}"
+        )
+
     user = session.get(User, book.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    book_obj = Book(title=book.title, description=book.description,
-                    file_path=book.file_path, user_id=book.user_id)
+
+    book_obj = Book(
+        title=book.title,
+        description=book.description,
+        file_path=book.file_path,
+        user_id=book.user_id
+    )
     session.add(book_obj)
     session.commit()
     session.refresh(book_obj)
