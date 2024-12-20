@@ -47,7 +47,7 @@ class Book(BookBase, table=True):
 # ================================================================================
 
 
-DATABASE_URL = "sqlite:///./database.db"
+DATABASE_URL = "sqlite:///database.db"
 engine = create_engine(DATABASE_URL, echo=True)
 
 

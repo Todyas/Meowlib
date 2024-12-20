@@ -1,55 +1,47 @@
-import random
 from faker import Faker
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from database import User, Book, create_db_and_tables
+import requests
 
-# Инициализация Faker
-faker = Faker()
+fake = Faker()
 
-# Настройка базы данных
-DATABASE_URL = "sqlite:///./test.db"
-engine = create_engine(DATABASE_URL, echo=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Создание базы данных и таблиц
-create_db_and_tables()
+API_URL = "http://127.0.0.1:8000"
 
 
-def populate_database():
-    session = SessionLocal()
-    try:
-        # Генерация пользователей
-        users = []
-        for _ in range(10):
-            username = faker.user_name()
-            email = faker.email()
-            password_hash = faker.password()
-            user = User(username=username, email=email,
-                        password_hash=password_hash)
-            session.add(user)
-            users.append(user)
+def create_fake_users(count=10):
+    for _ in range(count):
+        user_data = {
+            "username": fake.user_name(),
+            "email": fake.email(),
+            "password": fake.password()
+        }
+        response = requests.post(f"{API_URL}/users/", json=user_data)
+        if response.status_code == 200:
+            print(f"User created: {response.json()}")
+        else:
+            print(f"Failed to create user: {response.text}")
 
-        session.commit()
 
-        # Генерация книг
-        for _ in range(30):
-            title = faker.sentence(nb_words=3)
-            description = faker.text(max_nb_chars=200)
-            file_path = faker.file_path(extension='pdf')
-            user = random.choice(users)
-            book = Book(title=title, description=description,
-                        file_path=file_path, user_id=user.id)
-            session.add(book)
+def create_fake_books(user_count, book_count_per_user=5):
+    users_response = requests.get(f"{API_URL}/users/")
+    if users_response.status_code != 200:
+        print("Failed to fetch users")
+        return
 
-        session.commit()
-        print("Database populated successfully!")
-    except Exception as e:
-        session.rollback()
-        print(f"An error occurred: {e}")
-    finally:
-        session.close()
+    users = users_response.json()
+    for user in users[:user_count]:
+        for _ in range(book_count_per_user):
+            book_data = {
+                "title": fake.sentence(nb_words=4),
+                "description": fake.paragraph(),
+                "file_path": fake.file_path(),
+                "user_id": user["id"]
+            }
+            response = requests.post(f"{API_URL}/books/", json=book_data)
+            if response.status_code == 200:
+                print(f"Book created: {response.json()}")
+            else:
+                print(f"Failed to create book: {response.text}")
 
 
 if __name__ == "__main__":
-    populate_database()
+    create_fake_users(10)
+    create_fake_books(user_count=10, book_count_per_user=5)
