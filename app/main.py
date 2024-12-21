@@ -122,24 +122,45 @@ async def login_post(request: Request, login: str = Form(...), password: str = F
 
 @app.get("/registration", response_class=HTMLResponse)
 async def registration_get(request: Request):
-    return templates.TemplateResponse("reg.html", {"request": request})
+    user_login = request.cookies.get("username")
+    return templates.TemplateResponse("reg.html", {
+        "request": request,
+        "user_login": user_login})
 
 
 @app.post("/registration")
 async def registration_post(request: Request, login: str = Form(...), email: str = Form(...), password: str = Form(...)):
     try:
-        await make_request("POST", f"{config.DB_API_URL}/users/", json={"username": login, "email": email, "password": password})
+        await make_request("POST", f"{config.DB_API_URL}/users/", json={
+            "username": login,
+            "email": email,
+            "password": password})
         return RedirectResponse(url="/login", status_code=303)
     except HTTPException as e:
-        return templates.TemplateResponse("reg.html", {"request": request, "error": str(e.detail)})
+        return templates.TemplateResponse("reg.html", {
+            "request": request,
+            "error": str(e.detail)})
 
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    response = await make_request("GET", f"{config.DB_API_URL}/books/")
-    books = response.json()
-    user_login = request.cookies.get("user_login")
-    return templates.TemplateResponse("index.html", {"request": request, "books": books, "user_login": user_login})
+    user_login = request.cookies.get("username")  # Получаем логин из куки
+    books = []  # По умолчанию пустой список книг
+
+    try:
+        # Попытка получить список книг
+        response = await make_request("GET", f"{config.DB_API_URL}/books/")
+        books = response.json()
+    except HTTPException:
+        # Если произошла ошибка — книги остаются пустыми
+        pass
+
+    # Передаем в шаблон логин пользователя и книги
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "books": books,
+        "user_login": user_login
+    })
 
 
 @app.get("/logout")
@@ -153,14 +174,16 @@ async def logout(request: Request):
 
 @app.get("/add_book", response_class=HTMLResponse)
 async def add_book_get(request: Request):
-    user_login = request.cookies.get("user_login")
-    return templates.TemplateResponse("add_book.html", {"request": request, "user_login": user_login})
+    user_login = request.cookies.get("username")
+    return templates.TemplateResponse("add_book.html", {
+        "request": request,
+        "user_login": user_login})
 
 
 @app.post("/add_book")
 async def add_book_post(request: Request, title: str = Form(...), author: str = Form(...), description: str = Form(...),
                         book_file: UploadFile = None, cover_file: UploadFile = None):
-    user_login = request.cookies.get("user_login")
+    user_login = request.cookies.get("username")
     if not user_login:
         raise HTTPException(status_code=401, detail="Authorization required")
 
@@ -186,7 +209,7 @@ async def add_book_post(request: Request, title: str = Form(...), author: str = 
         "description": description,
         "file_path": book_path,
         "cover_path": cover_path,
-        "user_login": user_login
+        "user_id": request.cookies.get("user_id")
     })
 
     return RedirectResponse(url="/", status_code=303)
@@ -196,7 +219,11 @@ async def add_book_post(request: Request, title: str = Form(...), author: str = 
 async def book_details(request: Request, book_id: int):
     response = await make_request("GET", f"{config.DB_API_URL}/books/{book_id}/")
     book = response.json()
-    return templates.TemplateResponse("book.html", {"request": request, "book": book})
+    user_login = request.cookies.get("username")
+    return templates.TemplateResponse("book.html", {
+        "request": request,
+        "book": book,
+        "user_login": user_login})
 
 # Run the application
 if __name__ == "__main__":

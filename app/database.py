@@ -47,6 +47,7 @@ class BookBase(SQLModel):
     Базовая модель книги
     """
     title: str = Field(index=True)  # Название книги
+    author: Optional[str] = None  # Автор
     description: Optional[str] = None  # Описание книги
     file_path: str  # Путь к файлу
     cover_path: Optional[str] = None  # Путь к обложке
