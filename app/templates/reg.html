@@ -1,19 +1,20 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Регистрация</h2>
-<form method="post" action="/register">
-    <div class="mb-3">
+
+<form method="post" action="/registration">
+    <h2 class="col-4 offset-4 mb-3">Регистрация</h2>
+    <div class="col-4 offset-4 mb-3">
         <label for="login" class="form-label">Логин</label>
         <input type="text" class="form-control" name="login" id="login" required>
     </div>
-    <div class="mb-3">
+    <div class="col-4 offset-4 mb-3">
         <label for="email" class="form-label">E-mail</label>
         <input type="email" class="form-control" name="email" id="email" required>
     </div>
-    <div class="mb-3">
+    <div class="col-4 offset-4 mb-3">
         <label for="password" class="form-label">Пароль</label>
         <input type="password" class="form-control" name="password" id="password" required>
     </div>
-    <button type="submit" class="btn btn-primary">Зарегистрироваться</button>
+    <button type="submit" class="btn btn-primary col-4 offset-4 mt-4 mb-4">Зарегистрироваться</button>
 </form>
 {% endblock %}

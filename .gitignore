@@ -60,6 +60,8 @@ cover/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+.db
+config.py
 
 # Flask stuff:
 instance/
@@ -146,7 +148,7 @@ venv.bak/
 # mkdocs documentation
 /site
 
-.db
+
 # mypy
 .mypy_cache/
 .dmypy.json

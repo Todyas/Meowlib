@@ -1,15 +1,20 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Вход</h2>
-<form method="post" action="/login">
-    <div class="mb-3">
-        <label for="login" class="form-label">Логин</label>
-        <input type="text" class="form-control" name="login" id="login" required>
-    </div>
-    <div class="mb-3">
-        <label for="password" class="form-label">Пароль</label>
-        <input type="password" class="form-control" name="password" id="password" required>
-    </div>
-    <button type="submit" class="btn btn-primary">Войти</button>
-</form>
+
+<div class="raw">
+
+    <form method="post" action="/login">
+        <h2 class="col-4 offset-4 mb-3">Вход</h2>
+        <div class="col-4 offset-4">
+
+            <label for="login" class="form-label">Логин</label>
+            <input type="text" class="form-control" name="login" id="login" required>
+        </div>
+        <div class="col-4 offset-4">
+            <label for="password" class="form-label">Пароль</label>
+            <input type="password" class="form-control" name="password" id="password" required>
+        </div>
+        <button type="submit" class="btn btn-primary col-4 offset-4 mt-4 mb-4">Войти</button>
+    </form>
+</div>
 {% endblock %}
