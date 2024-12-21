@@ -142,6 +142,15 @@ async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request, "books": books, "user_login": user_login})
 
 
+@app.get("/logout")
+async def logout(request: Request):
+    # Перенаправляем на главную
+    response = RedirectResponse(url="/", status_code=303)
+    response.delete_cookie("username")  # Удаляем куки с именем пользователя
+    response.delete_cookie("user_id")  # Удаляем куки с ID пользователя
+    return response
+
+
 @app.get("/add_book", response_class=HTMLResponse)
 async def add_book_get(request: Request):
     user_login = request.cookies.get("user_login")
