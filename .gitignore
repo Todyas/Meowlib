@@ -32,9 +32,9 @@ MANIFEST
 *.manifest
 *.spec
 
-!/app/static/covers/default.jpg
-/app/static/covers/*
 
+/app/static/covers/*
+!/app/static/covers/default.png
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
