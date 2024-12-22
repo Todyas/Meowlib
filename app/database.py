@@ -72,6 +72,13 @@ class BookRead(BookBase):
     user_id: int
 
 
+class BookUpdate(BookBase):
+    title: Optional[str] = None
+    author: Optional[str] = None
+    description: Optional[str] = None
+    file_path: Optional[str] = None
+
+
 class Book(BookBase, table=True):
     """
     Модель книги
@@ -297,17 +304,24 @@ def read_book(*, session: Session = Depends(get_session), book_id: int):
 
 
 @app.patch("/books/{book_id}/", response_model=BookRead)
-def update_book(*, session: Session = Depends(get_session), book_id: int, book: BookCreate):
+def update_book(*, session: Session = Depends(get_session), book_id: int, book: BookUpdate):
     """
     Обновление информации о книге
     """
     db_book = session.get(Book, book_id)
     if not db_book:
         raise HTTPException(status_code=404, detail="Книга не найдена")
-    db_book.title = book.title  # Обновление названия книги
-    db_book.description = book.description  # Обновление описания книги
-    db_book.file_path = book.file_path  # Обновление пути к файлу
-    db_book.user_id = book.user_id  # Обновление идентификатора пользователя
+
+    # Обновляем только переданные поля
+    if book.title is not None:
+        db_book.title = book.title
+    if book.author is not None:
+        db_book.author = book.author
+    if book.description is not None:
+        db_book.description = book.description
+    if book.file_path is not None:
+        db_book.file_path = book.file_path
+
     session.add(db_book)
     session.commit()
     session.refresh(db_book)

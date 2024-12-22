@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Редактировать книгу</h2>
+<form method="post" action="/edit/{{ book.id }}" enctype="multipart/form-data">
+    <div class="mb-3">
+        <label for="title" class="form-label">Название</label>
+        <input type="text" class="form-control" name="title" id="title" value="{{ book.title }}" required>
+    </div>
+    <div class="mb-3">
+        <label for="author" class="form-label">Автор</label>
+        <input type="text" class="form-control" name="author" id="author" value="{{ book.author }}">
+    </div>
+    <div class="mb-3">
+        <label for="description" class="form-label">Описание</label>
+        <textarea class="form-control" name="description" id="description" rows="3">{{ book.description }}</textarea>
+    </div>
+    <div class="mb-3">
+        <label for="book_file" class="form-label">Обновить файл книги</label>
+        <input type="file" class="form-control" name="book_file" id="book_file">
+    </div>
+    <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+</form>
+{% endblock %}

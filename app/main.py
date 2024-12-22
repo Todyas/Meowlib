@@ -289,6 +289,56 @@ async def download_file(book_id: int):
     # Возвращайте файл для скачивания
     return FileResponse(path=file_path, filename=os.path.basename(file_path), media_type="application/octet-stream")
 
+
+@app.get("/edit/{book_id}", response_class=HTMLResponse)
+async def edit_book_get(request: Request, book_id: int):
+    user_login = request.cookies.get("username")
+    response = await make_request("GET", f"{config.DB_API_URL}/books/{book_id}/")
+    book = response.json()
+    return templates.TemplateResponse("edit_book.html", {
+        "request": request,
+        "book": book,
+        "user_login": user_login
+    })
+
+
+@app.post("/edit/{book_id}")
+async def edit_book_post(
+    request: Request,
+    book_id: int,
+    title: str = Form(...),
+    author: str = Form(...),
+    description: str = Form(...),
+    book_file: UploadFile = None
+):
+    user_login = request.cookies.get("username")
+    if not user_login:
+        raise HTTPException(status_code=401, detail="Authorization required")
+
+    # Обновляем путь к файлу, если файл предоставлен
+    if book_file:
+        book_path = os.path.join(
+            config.UPLOAD_DIR,
+            generate_filename(user_login, str(book_id), book_file.filename)
+        )
+        from aiofiles import open as aio_open
+        async with aio_open(book_path, "wb") as f:
+            await f.write(await book_file.read())
+    else:
+        # Если файл не предоставлен, оставляем старый путь
+        book = await make_request("GET", f"{config.DB_API_URL}/books/{book_id}/")
+        book_path = book.json().get("file_path")
+
+    # Отправляем обновленные данные в базу данных
+    await make_request("PATCH", f"{config.DB_API_URL}/books/{book_id}/", json={
+        "title": title,
+        "author": author,
+        "description": description,
+        "file_path": book_path
+    })
+
+    return RedirectResponse(url="/", status_code=303)
+
 # Run the application
 if __name__ == "__main__":
     import uvicorn

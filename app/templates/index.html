@@ -16,7 +16,10 @@
                     {% if book.cover_path %}
                     <img src="{{ book.cover_path }}" class="card-img-top" alt="Обложка книги">
                     {% endif %}
-                    <h5 class="card-title">{{ book.title[:100] }}</h5>
+                    <h3 class="card-title">{{ book.title[:100] }}</h3>
+                    {% if book.author %}
+                    <h5 class="card-subtitle mb-2 text-muted">{{ book.author[:100] }}</h5>
+                    {% endif %}
                     {% if book.description %}
                     <p class="card-text">{{ book.description[:100] }}...</p>
                     {% endif %}
