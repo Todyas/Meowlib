@@ -11,12 +11,16 @@
     <div class="row">
         {% for book in books %}
         <div class="col-md-4 mb-3">
-            <div class="card h-100">
+            <div class="card h-100 border-0 p-0">
                 <div class="card-body">
-                    {% if book.cover_path %}
-                    <img src="{{ book.cover_path }}" class="card-img-top" alt="Обложка книги">
-                    {% endif %}
-                    <h3 class="card-title">{{ book.title[:100] }}</h3>
+                    <a href="/book/{{ book.id }}">
+                        {% if book.cover_path %}
+                        <img src="{{ book.cover_path }}" class="card-img-top" alt="Обложка книги">
+                        {% else %}
+                        <img src="/static/covers/default.png" class="card-img-top" alt="Обложка книги">
+                        {% endif %}
+                    </a>
+                    <h3 class="card-title">{{ book.title[:30] }}</h3>
                     {% if book.author %}
                     <h5 class="card-subtitle mb-2 text-muted">{{ book.author[:100] }}</h5>
                     {% endif %}
@@ -24,7 +28,7 @@
                     <p class="card-text">{{ book.description[:100] }}...</p>
                     {% endif %}
                     <div class="d-flex justify-content-between">
-                        <a href="/book/{{ book.id }}" class="btn btn-primary">Детали</a>
+                        <a href="/book/{{ book.id }}" class="btn btn-primary">Скачать</a>
                         <a href="/edit/{{ book.id }}" class="btn btn-secondary">Редактировать</a>
                     </div>
                 </div>

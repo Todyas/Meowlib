@@ -4,6 +4,11 @@
 
 {% block content %}
 <div class="container mt-4">
+    {% if book.cover_path %}
+    <img src="{{ book.cover_path }}" height="600" width="400" alt="{{ book.title }}">
+    {% else %}
+    <img src="/static/covers/default.png" height="600" width="400" alt="{{ book.title }}">
+    {% endif %}
     <h1>{{ book.title }}</h1>
     {% if book.author %}
     <p><strong>Author:</strong> {{ book.author }}</p>

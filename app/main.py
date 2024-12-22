@@ -19,17 +19,6 @@ app = FastAPI()
 app.add_middleware(SessionMiddleware, secret_key=config.SECRET_KEY)
 
 
-class StaticFileFallbackMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
-        if response.status_code == 404 and request.url.path.startswith("/static/covers/"):
-            return FileResponse("app/static/covers/default.jpg")
-        return response
-
-
-app.add_middleware(StaticFileFallbackMiddleware)
-
-
 # Configure directories
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -60,25 +49,24 @@ async def make_request(method: str, url: str, **kwargs):
 # Helper function to generate filenames
 
 
-def generate_filename(user_id: str, book_id: str, name: str) -> str:
-    """Generate a standardized filename."""
-    sanitized_name = "_".join(name.split()).replace(
+def generate_filename(user_id: str, book_id: str, original_name: str, extension: str = None) -> str:
+    """Generate a standardized filename with optional extension handling."""
+    sanitized_name = "_".join(original_name.split()).replace(
         "/", "_").replace("\\", "_")
-    return f"{user_id}_{book_id}_{sanitized_name}"
+    ext = extension or Path(original_name).suffix
+    return f"{user_id}_{book_id}_{sanitized_name}{ext}"
+
 
 # Helper function to extract cover image
 
 
 def generate_cover_image(book_file_path: str, cover_file_path: str) -> bool:
-    """
-    Генерирует обложку для PDF/ePub, сохраняет в `cover_file_path`.
-    Возвращает True, если получилось сделать обложку, иначе False.
+    """Generate a cover image from a PDF or ePub file and save it to cover_file_path.
+    Return True if the cover image was generated successfully, False otherwise.
     """
     ext = Path(book_file_path).suffix.lower()
-
     try:
         if ext == ".pdf":
-            # Берём первую страницу из PDF и сохраняем как JPEG
             images = convert_from_path(
                 book_file_path, first_page=1, last_page=1)
             if images:
@@ -86,9 +74,7 @@ def generate_cover_image(book_file_path: str, cover_file_path: str) -> bool:
                 return True
             else:
                 return False
-
         elif ext == ".epub":
-            # Ищем первый image-item (обычно это обложка)
             book = epub.read_epub(book_file_path)
             for item in book.get_items():
                 if item.get_type() == ebooklib.ITEM_IMAGE:
@@ -96,13 +82,10 @@ def generate_cover_image(book_file_path: str, cover_file_path: str) -> bool:
                         f.write(item.get_content())
                     return True
             return False
-
         else:
-            # Никаких MOBI и прочих форматов. Только PDF/ePub.
             return False
-
     except Exception as e:
-        print(f"[generate_cover_image] Ошибка при обработке {ext}: {e}")
+        print(f"[generate_cover_image] Error processing {ext}: {e}")
         return False
 
 
