@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
+import os
 import bcrypt
 from fastapi import Depends, FastAPI, HTTPException, Body
+from fastapi.responses import FileResponse
 from sqlmodel import Field, Relationship, create_engine, SQLModel, Session, select
 from typing import Annotated, List, Optional
 from config import config
@@ -263,6 +265,7 @@ def create_book(*, session: Session = Depends(get_session), book: BookCreate):
 
     book_obj = Book(
         title=book.title,
+        author=book.author,
         description=book.description,
         file_path=book.file_path,
         user_id=book.user_id

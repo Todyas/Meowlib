@@ -13,9 +13,17 @@
         <div class="col-md-4 mb-3">
             <div class="card h-100">
                 <div class="card-body">
-                    <h5 class="card-title">{{ book.title }}</h5>
+                    {% if book.cover_path %}
+                    <img src="{{ book.cover_path }}" class="card-img-top" alt="Обложка книги">
+                    {% endif %}
+                    <h5 class="card-title">{{ book.title[:100] }}</h5>
+                    {% if book.description %}
                     <p class="card-text">{{ book.description[:100] }}...</p>
-                    <a href="/book/{{ book.id }}" class="btn btn-primary">Детали</a>
+                    {% endif %}
+                    <div class="d-flex justify-content-between">
+                        <a href="/book/{{ book.id }}" class="btn btn-primary">Детали</a>
+                        <a href="/edit/{{ book.id }}" class="btn btn-secondary">Редактировать</a>
+                    </div>
                 </div>
             </div>
         </div>

@@ -1,3 +1,6 @@
+import ebooklib
+import epub
+from pdf2image import convert_from_path
 from fastapi import FastAPI, HTTPException, Request, Form, UploadFile, Depends
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -19,7 +22,7 @@ app.add_middleware(SessionMiddleware, secret_key=config.SECRET_KEY)
 class StaticFileFallbackMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
-        if response.status_code == 404 and request.url.path.startswith("app/static/covers/"):
+        if response.status_code == 404 and request.url.path.startswith("/static/covers/"):
             return FileResponse("app/static/covers/default.jpg")
         return response
 
@@ -66,14 +69,41 @@ def generate_filename(user_id: str, book_id: str, name: str) -> str:
 # Helper function to extract cover image
 
 
-def extract_cover_image(file_path: str, output_path: str):
-    """Extract the first page of a file as an image."""
-    ext = Path(file_path).suffix.lower()
-    if ext == ".pdf":
-        images = convert_from_path(file_path, first_page=1, last_page=1)
-        if images:
-            images[0].save(output_path, "JPEG")
-    # Add logic for other file types if needed (e.g., EPUB, MOBI)
+def generate_cover_image(book_file_path: str, cover_file_path: str) -> bool:
+    """
+    Генерирует обложку для PDF/ePub, сохраняет в `cover_file_path`.
+    Возвращает True, если получилось сделать обложку, иначе False.
+    """
+    ext = Path(book_file_path).suffix.lower()
+
+    try:
+        if ext == ".pdf":
+            # Берём первую страницу из PDF и сохраняем как JPEG
+            images = convert_from_path(
+                book_file_path, first_page=1, last_page=1)
+            if images:
+                images[0].save(cover_file_path, "JPEG")
+                return True
+            else:
+                return False
+
+        elif ext == ".epub":
+            # Ищем первый image-item (обычно это обложка)
+            book = epub.read_epub(book_file_path)
+            for item in book.get_items():
+                if item.get_type() == ebooklib.ITEM_IMAGE:
+                    with open(cover_file_path, "wb") as f:
+                        f.write(item.get_content())
+                    return True
+            return False
+
+        else:
+            # Никаких MOBI и прочих форматов. Только PDF/ePub.
+            return False
+
+    except Exception as e:
+        print(f"[generate_cover_image] Ошибка при обработке {ext}: {e}")
+        return False
 
 
 # =================================== Рутинг ===================================
@@ -181,28 +211,44 @@ async def add_book_get(request: Request):
 
 
 @app.post("/add_book")
-async def add_book_post(request: Request, title: str = Form(...), author: str = Form(...), description: str = Form(...),
-                        book_file: UploadFile = None, cover_file: UploadFile = None):
+async def add_book_post(
+    request: Request,
+    title: str = Form(...),
+    author: str = Form(...),
+    description: str = Form(...),
+    book_file: UploadFile = None,
+    cover_file: UploadFile = None
+):
     user_login = request.cookies.get("username")
     if not user_login:
         raise HTTPException(status_code=401, detail="Authorization required")
 
-    # Generate file paths
-    book_path = os.path.join(config.UPLOAD_DIR, generate_filename(
-        user_login, "new", book_file.filename))
+    # Генерим пути
+    book_path = os.path.join(
+        config.UPLOAD_DIR,
+        generate_filename(user_login, "new", book_file.filename)
+    )
     cover_path = os.path.join(
-        "static/covers", generate_filename(user_login, "new", "cover.jpg"))
+        "app", "static", "covers",
+        generate_filename(user_login, "new", "cover.jpg")
+    )
 
+    # Сохраняем файл книги
     from aiofiles import open as aio_open
-
     async with aio_open(book_path, "wb") as f:
         await f.write(await book_file.read())
 
+    # Если пользователь прислал обложку
     if cover_file:
         async with aio_open(cover_path, "wb") as f:
             await f.write(await cover_file.read())
+    else:
+        # Пытаемся сгенерировать обложку
+        generate_cover_image(book_path, cover_path)
+        # Если генерация не удалась или формат неизвестный —
+        # при отображении сработает наш fallback через мидлвэйр.
 
-    # Submit book data to API
+    # Отправляем метаданные книги в нашу БД
     await make_request("POST", f"{config.DB_API_URL}/books/", json={
         "title": title,
         "author": author,
@@ -224,6 +270,24 @@ async def book_details(request: Request, book_id: int):
         "request": request,
         "book": book,
         "user_login": user_login})
+
+
+@app.get("/download/{book_id}")
+async def download_file(book_id: int):
+    from fastapi.responses import FileResponse
+    # Получите информацию о книге из базы данных
+    response = await make_request("GET", f"{config.DB_API_URL}/books/{book_id}/")
+    book = response.json()
+
+    # Путь к файлу книги
+    file_path = book["file_path"]
+
+    # Проверьте, существует ли файл
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Файл не найден")
+
+    # Возвращайте файл для скачивания
+    return FileResponse(path=file_path, filename=os.path.basename(file_path), media_type="application/octet-stream")
 
 # Run the application
 if __name__ == "__main__":
