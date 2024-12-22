@@ -12,63 +12,40 @@ from config import config
 
 
 class UserBase(SQLModel):
-    """
-    Базовая модель пользователя
-    """
-    username: str = Field(index=True, unique=True)  # Имя пользователя
-    email: str = Field(index=True, unique=True)  # Электронная почта
+    username: str = Field(index=True, unique=True)
+    email: str = Field(index=True, unique=True)
 
 
 class UserCreate(UserBase):
-    """
-    Модель для создания пользователя
-    """
-    password: str  # Пароль
+    password: str
 
 
 class UserRead(UserBase):
-    """
-    Модель для чтения пользователя
-    """
-    id: int  # Идентификатор пользователя
+    id: int
 
 
 class User(UserBase, table=True):
-    """
-    Модель пользователя
-    """
     id: Optional[int] = Field(
-        default=None, primary_key=True)  # Идентификатор пользователя
-    password_hash: str  # Хэш пароля
+        default=None, primary_key=True)
+    password_hash: str
     books: List["Book"] = Relationship(
-        back_populates="user")  # Связь с книгами
+        back_populates="user")
 
 
 class BookBase(SQLModel):
-    """
-    Базовая модель книги
-    """
-    title: str = Field(index=True)  # Название книги
-    author: Optional[str] = None  # Автор
-    description: Optional[str] = None  # Описание книги
-    file_path: str  # Путь к файлу
-    cover_path: Optional[str] = None  # Путь к обложке
+    title: str = Field(index=True)
+    author: Optional[str]
+    description: Optional[str]
+    file_path: str
+    cover_path: Optional[str]
 
 
 class BookCreate(BookBase):
-    """
-    Модель для создания книги
-    """
-    user_id: int  # Идентификатор пользователя
+    user_id: int
 
 
 class BookRead(BookBase):
-    """
-    Модель для чтения книги
-    """
-    # Идентификатор книги
     id: int
-    # Идентификатор пользователя
     user_id: int
 
 
@@ -80,16 +57,10 @@ class BookUpdate(BookBase):
 
 
 class Book(BookBase, table=True):
-    """
-    Модель книги
-    """
-    # Идентификатор книги
     id: Optional[int] = Field(
         default=None, primary_key=True)
 
-    # Идентификатор пользователя
     user_id: Optional[int] = Field(default=None, foreign_key="user.id")
-    # Связь с пользователем
     user: Optional[User] = Relationship(
         back_populates="books")
 
@@ -117,11 +88,9 @@ SessionDep = Annotated[Session, Depends(get_session)]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Обработчик события запуска приложения
-    """
     create_db_and_tables()
     yield
+
 
 app = FastAPI(lifespan=lifespan)
 
@@ -130,18 +99,12 @@ app = FastAPI(lifespan=lifespan)
 
 
 def hash_password(password: str) -> str:
-    """
-    Хэширование пароля
-    """
     salt = bcrypt.gensalt()
     hashed_password = bcrypt.hashpw(password.encode('utf-8'), salt)
     return hashed_password.decode('utf-8')
 
 
 def verify_password(password: str, hashed_password: str) -> bool:
-    """
-    Проверка пароля
-    """
     return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
 
 
@@ -150,16 +113,13 @@ def verify_password(password: str, hashed_password: str) -> bool:
 
 @app.post("/users/", response_model=UserRead)
 def create_user(*, session: Session = Depends(get_session), user: UserCreate):
-    """
-    Создание нового пользователя
-    """
     db_user = session.exec(select(User).where(
         User.username == user.username)).first()
     if db_user:
         raise HTTPException(
-            status_code=400, detail="Имя пользователя уже зарегистрировано"
+            status_code=400, detail="Username already registered"
         )
-    hashed_password = hash_password(user.password)  # Хэширование пароля
+    hashed_password = hash_password(user.password)
     user_obj = User(username=user.username, email=user.email,
                     password_hash=hashed_password)
     session.add(user_obj)
@@ -175,26 +135,20 @@ async def authenticate_user(
     username: str = Body(..., embed=True),
     password: str = Body(..., embed=True)
 ):
-    """
-    Аутентификация пользователя
-    """
-    # Проверяем, существует ли пользователь
     db_user = session.exec(select(User).where(
         User.username == username)).first()
     if not db_user:
         raise HTTPException(
-            status_code=401, detail="Неверное имя пользователя или пароль"
+            status_code=401, detail="Incorrect username or password"
         )
 
-    # Проверяем пароль
     if not verify_password(password, db_user.password_hash):
         raise HTTPException(
-            status_code=401, detail="Неверное имя пользователя или пароль"
+            status_code=401, detail="Incorrect username or password"
         )
 
-    # Возвращаем результат успешной аутентификации
     return {
-        "message": "Аутентификация успешна",
+        "message": "Authentication successful",
         "user_id": db_user.id,
         "username": db_user.username
     }
@@ -202,18 +156,12 @@ async def authenticate_user(
 
 @app.get("/users/", response_model=List[UserRead])
 def read_users(*, session: Session = Depends(get_session)):
-    """
-    Получение всех пользователей
-    """
     users = session.exec(select(User)).all()
     return users
 
 
 @app.get("/users/{user_id}/", response_model=UserRead)
 def read_user(*, session: Session = Depends(get_session), user_id: int):
-    """
-    Получение информации о пользователе по идентификатору
-    """
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
@@ -222,15 +170,12 @@ def read_user(*, session: Session = Depends(get_session), user_id: int):
 
 @app.patch("/users/{user_id}/", response_model=UserRead)
 def update_user(*, session: Session = Depends(get_session), user_id: int, user: UserCreate):
-    """
-    Обновление информации о пользователе
-    """
     db_user = session.get(User, user_id)
     if not db_user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
-    db_user.username = user.username  # Обновление имени пользователя
-    db_user.email = user.email  # Обновление электронной почты
-    db_user.password_hash = user.password  # Обновление хэша пароля
+    db_user.username = user.username
+    db_user.email = user.email
+    db_user.password_hash = user.password
     session.add(db_user)
     session.commit()
     session.refresh(db_user)
@@ -239,12 +184,9 @@ def update_user(*, session: Session = Depends(get_session), user_id: int, user: 
 
 @app.delete("/users/{user_id}/")
 def delete_user(*, session: Session = Depends(get_session), user_id: int):
-    """
-    Удаление пользователя
-    """
     user = session.get(User, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+        raise HTTPException(status_code=404, detail="Пользователь не найдет")
     session.delete(user)
     session.commit()
     return {"ok": True}
@@ -252,17 +194,14 @@ def delete_user(*, session: Session = Depends(get_session), user_id: int):
 
 @app.post("/books/", response_model=BookRead)
 def create_book(*, session: Session = Depends(get_session), book: BookCreate):
-    """
-    Создание новой книги
-    """
     allowed_extensions = {".pdf", ".epub", ".mobi", ".txt",
-                          ".doc", ".docx", ".rtf"}  # Разрешённые форматы
+                          ".doc", ".docx", ".rtf"}
     file_extension = book.file_path.split(".")[-1].lower()
 
     if f".{file_extension}" not in allowed_extensions:
         raise HTTPException(
             status_code=400,
-            detail=f"Неверный формат файла. Допустимые форматы: {
+            detail=f"Неверное расширение файла. Поддерживаемые расширения: {
                 ', '.join(allowed_extensions)}"
         )
 
@@ -285,34 +224,24 @@ def create_book(*, session: Session = Depends(get_session), book: BookCreate):
 
 @app.get("/books/", response_model=List[BookRead])
 def read_books(*, session: Session = Depends(get_session)):
-    """
-    Получение всех книг
-    """
     books = session.exec(select(Book)).all()
     return books
 
 
 @app.get("/books/{book_id}/", response_model=BookRead)
 def read_book(*, session: Session = Depends(get_session), book_id: int):
-    """
-    Получение информации о книге по идентификатору
-    """
     book = session.get(Book, book_id)
     if not book:
-        raise HTTPException(status_code=404, detail="Книга не найдена")
+        raise HTTPException(status_code=404, detail="Book not found")
     return book
 
 
 @app.patch("/books/{book_id}/", response_model=BookRead)
 def update_book(*, session: Session = Depends(get_session), book_id: int, book: BookUpdate):
-    """
-    Обновление информации о книге
-    """
     db_book = session.get(Book, book_id)
     if not db_book:
-        raise HTTPException(status_code=404, detail="Книга не найдена")
+        raise HTTPException(status_code=404, detail="Book not found")
 
-    # Обновляем только переданные поля
     if book.title is not None:
         db_book.title = book.title
     if book.author is not None:
@@ -330,12 +259,9 @@ def update_book(*, session: Session = Depends(get_session), book_id: int, book: 
 
 @app.delete("/books/{book_id}/")
 def delete_book(*, session: Session = Depends(get_session), book_id: int):
-    """
-    Удаление книги
-    """
     book = session.get(Book, book_id)
     if not book:
-        raise HTTPException(status_code=404, detail="Книга не найдена")
+        raise HTTPException(status_code=404, detail="Book not found")
     session.delete(book)
     session.commit()
     return {"ok": True}
@@ -343,9 +269,6 @@ def delete_book(*, session: Session = Depends(get_session), book_id: int):
 
 @app.get("/users/{user_id}/books/", response_model=List[BookRead])
 def read_books_by_user(*, session: Session = Depends(get_session), user_id: int):
-    """
-    Получение всех книг пользователя
-    """
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")

@@ -100,37 +100,23 @@ async def login_get(request: Request):
 @app.post("/login")
 async def login_post(request: Request, login: str = Form(...), password: str = Form(...)):
     try:
-        # Отправляем запрос на аутентификацию
         response = await make_request(
             "POST",
             f"{config.DB_API_URL}/users/authenticate/",
             json={"username": login, "password": password}
         )
         response_data = response.json()
-
-        # Создаём редирект на главную страницу
         redirect_response = RedirectResponse(url="/", status_code=303)
-
-        # Устанавливаем cookies для хранения user_id и username
+        redirect_response.set_cookie(key="user_id", value=str(
+            response_data.get("user_id")), httponly=True)
         redirect_response.set_cookie(
-            key="user_id",
-            value=str(response_data.get("user_id")),
-            httponly=True,
-            secure=False  # Установите True при использовании HTTPS
-        )
-        redirect_response.set_cookie(
-            key="username",
-            value=response_data.get("username"),
-            httponly=True,
-            secure=False  # Установите True при использовании HTTPS
-        )
+            key="username", value=response_data.get("username"), httponly=True)
         return redirect_response
     except HTTPException as e:
-        # Возвращаем страницу с ошибкой аутентификации
-        return templates.TemplateResponse(
-            "login.html",
-            {"request": request, "error": str(e.detail)}
-        )
+        return templates.TemplateResponse("login.html", {
+            "request": request,
+            "error": "Неверное имя пользователя или пароль"
+        })
 
 
 @app.get("/registration", response_class=HTMLResponse)
@@ -147,12 +133,15 @@ async def registration_post(request: Request, login: str = Form(...), email: str
         await make_request("POST", f"{config.DB_API_URL}/users/", json={
             "username": login,
             "email": email,
-            "password": password})
+            "password": password
+        })
         return RedirectResponse(url="/login", status_code=303)
     except HTTPException as e:
+        error_message = "Данный логин уже занят" if e.status_code != 400 else e.detail
         return templates.TemplateResponse("reg.html", {
             "request": request,
-            "error": str(e.detail)})
+            "error": error_message
+        })
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -321,6 +310,33 @@ async def edit_book_post(
     })
 
     return RedirectResponse(url="/", status_code=303)
+
+
+@app.get("/delete/{book_id}")
+async def delete_book_route(book_id: int, request: Request):
+    # Проверка авторизации пользователя
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Требуется авторизация")
+
+    # Проверить, существует ли книга и принадлежит ли она пользователю
+    response = await make_request("GET", f"{config.DB_API_URL}/books/{book_id}/")
+    book = response.json()
+    if book["user_id"] != int(user_id):
+        raise HTTPException(
+            status_code=403, detail="Удаление книги не разрешено")
+
+    # Удалить книгу из базы данных
+    await make_request("DELETE", f"{config.DB_API_URL}/books/{book_id}/")
+
+    # Удалить файл книги и обложку
+    if os.path.exists(book["file_path"]):
+        os.remove(book["file_path"])
+    if book["cover_path"] and os.path.exists(book["cover_path"]):
+        os.remove(book["cover_path"])
+
+    return RedirectResponse(url="/", status_code=303)
+
 
 # Run the application
 if __name__ == "__main__":
