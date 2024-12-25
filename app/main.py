@@ -1,3 +1,4 @@
+import time
 import ebooklib
 import epub
 from pdf2image import convert_from_path
@@ -54,15 +55,16 @@ def generate_filename(user_id: str, book_id: str, original_name: str, extension:
     sanitized_name = "_".join(original_name.split()).replace(
         "/", "_").replace("\\", "_")
     ext = extension or Path(original_name).suffix
-    return f"{user_id}_{book_id}_{sanitized_name}{ext}"
+    return f"{user_id}_{book_id}_{sanitized_name}_{int(time.time())}{ext}"
 
 
 # Helper function to extract cover image
 
 
-def generate_cover_image(book_file_path: str, cover_file_path: str) -> bool:
-    """Generate a cover image from a PDF or ePub file and save it to cover_file_path.
-    Return True if the cover image was generated successfully, False otherwise.
+def generate_cover_image(book_file_path: str, cover_file_path: str) -> str:
+    """
+    Generate a cover image from the first page of a PDF or the first image in an ePub.
+    Save the cover image and return the path. If not successful, return None.
     """
     ext = Path(book_file_path).suffix.lower()
     try:
@@ -71,22 +73,20 @@ def generate_cover_image(book_file_path: str, cover_file_path: str) -> bool:
                 book_file_path, first_page=1, last_page=1)
             if images:
                 images[0].save(cover_file_path, "JPEG")
-                return True
-            else:
-                return False
+                return cover_file_path
         elif ext == ".epub":
             book = epub.read_epub(book_file_path)
             for item in book.get_items():
                 if item.get_type() == ebooklib.ITEM_IMAGE:
                     with open(cover_file_path, "wb") as f:
                         f.write(item.get_content())
-                    return True
-            return False
-        else:
-            return False
+                        print(f"Генерация обложки для файла {
+                              book_file_path} завершена. Сохранено в: {cover_file_path}")
+
+                    return cover_file_path
     except Exception as e:
         print(f"[generate_cover_image] Error processing {ext}: {e}")
-        return False
+    return None
 
 
 # =================================== Рутинг ===================================
@@ -191,18 +191,18 @@ async def add_book_post(
     book_file: UploadFile = None,
     cover_file: UploadFile = None
 ):
-    user_login = request.cookies.get("username")
-    if not user_login:
+    user_id = request.cookies.get("user_id")
+    if not user_id:
         raise HTTPException(status_code=401, detail="Authorization required")
 
     # Генерим пути
     book_path = os.path.join(
         config.UPLOAD_DIR,
-        generate_filename(user_login, "new", book_file.filename)
+        generate_filename(user_id, "new", book_file.filename)
     )
     cover_path = os.path.join(
         "app", "static", "covers",
-        generate_filename(user_login, "new", "cover.jpg")
+        generate_filename(user_id, "new", "cover.jpg")
     )
 
     # Сохраняем файл книги
@@ -210,24 +210,25 @@ async def add_book_post(
     async with aio_open(book_path, "wb") as f:
         await f.write(await book_file.read())
 
-    # Если пользователь прислал обложку
+    # Сохраняем или генерируем обложку
     if cover_file:
         async with aio_open(cover_path, "wb") as f:
             await f.write(await cover_file.read())
     else:
-        # Пытаемся сгенерировать обложку
-        generate_cover_image(book_path, cover_path)
-        # Если генерация не удалась или формат неизвестный —
-        # при отображении сработает наш fallback через мидлвэйр.
+        generated_cover = generate_cover_image(book_path, cover_path)
+        if generated_cover:
+            cover_path = generated_cover
+        else:
+            cover_path = None
 
-    # Отправляем метаданные книги в нашу БД
+    # Сохраняем данные в базу
     await make_request("POST", f"{config.DB_API_URL}/books/", json={
         "title": title,
         "author": author,
         "description": description,
         "file_path": book_path,
         "cover_path": cover_path,
-        "user_id": request.cookies.get("user_id")
+        "user_id": user_id
     })
 
     return RedirectResponse(url="/", status_code=303)

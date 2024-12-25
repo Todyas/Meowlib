@@ -214,8 +214,10 @@ def create_book(*, session: Session = Depends(get_session), book: BookCreate):
         author=book.author,
         description=book.description,
         file_path=book.file_path,
-        user_id=book.user_id
+        user_id=book.user_id,
+        cover_path=book.cover_path
     )
+
     session.add(book_obj)
     session.commit()
     session.refresh(book_obj)
