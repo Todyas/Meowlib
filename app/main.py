@@ -281,13 +281,19 @@ async def edit_book_post(
     title: str = Form(...),
     author: str = Form(...),
     description: str = Form(...),
-    book_file: UploadFile = None
+    book_file: UploadFile = None,
+    cover_file: UploadFile = None
 ):
     user_login = request.cookies.get("username")
     if not user_login:
         raise HTTPException(status_code=401, detail="Authorization required")
 
-    # Обновляем путь к файлу, если файл предоставлен
+    # Получение текущих данных книги
+    book_response = await make_request("GET", f"{config.DB_API_URL}/books/{book_id}/")
+    book = book_response.json()
+
+    # Путь к книге
+    book_path = book["file_path"]
     if book_file:
         book_path = os.path.join(
             config.UPLOAD_DIR,
@@ -296,17 +302,28 @@ async def edit_book_post(
         from aiofiles import open as aio_open
         async with aio_open(book_path, "wb") as f:
             await f.write(await book_file.read())
-    else:
-        # Если файл не предоставлен, оставляем старый путь
-        book = await make_request("GET", f"{config.DB_API_URL}/books/{book_id}/")
-        book_path = book.json().get("file_path")
 
-    # Отправляем обновленные данные в базу данных
+    # Путь к обложке
+    cover_path = book["cover_path"] or os.path.join(
+        "app", "static", "covers",
+        generate_filename(user_login, str(book_id), "cover.jpg")
+    )
+    if cover_file:
+        from aiofiles import open as aio_open
+        async with aio_open(cover_path, "wb") as f:
+            await f.write(await cover_file.read())
+    else:
+        # Генерация обложки, если файл книги обновлён или новая обложка не загружена
+        if book_file:
+            generate_cover_image(book_path, cover_path)
+
+    # Обновление данных в БД
     await make_request("PATCH", f"{config.DB_API_URL}/books/{book_id}/", json={
         "title": title,
         "author": author,
         "description": description,
-        "file_path": book_path
+        "file_path": book_path,
+        "cover_path": cover_path
     })
 
     return RedirectResponse(url="/", status_code=303)
