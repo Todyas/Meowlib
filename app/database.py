@@ -54,6 +54,7 @@ class BookUpdate(BookBase):
     author: Optional[str] = None
     description: Optional[str] = None
     file_path: Optional[str] = None
+    cover_path: Optional[str] = None
 
 
 class Book(BookBase, table=True):
@@ -252,6 +253,8 @@ def update_book(*, session: Session = Depends(get_session), book_id: int, book: 
         db_book.description = book.description
     if book.file_path is not None:
         db_book.file_path = book.file_path
+    if book.cover_path is not None:
+        db_book.cover_path = book.cover_path
 
     session.add(db_book)
     session.commit()

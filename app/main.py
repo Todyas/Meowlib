@@ -31,10 +31,9 @@ os.makedirs("static/covers", exist_ok=True)
 
 
 async def make_request(method: str, url: str, **kwargs):
-    """Wrapper for making HTTP requests with retry logic."""
     import httpx
 
-    for _ in range(3):  # Retry up to 3 times
+    for _ in range(3):
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.request(method, url, **kwargs)
@@ -47,18 +46,11 @@ async def make_request(method: str, url: str, **kwargs):
     raise HTTPException(status_code=500, detail="External API request failed")
 
 
-# Helper function to generate filenames
-
-
 def generate_filename(user_id: str, book_id: str, original_name: str, extension: str = None) -> str:
-    """Generate a standardized filename with optional extension handling."""
     sanitized_name = "_".join(original_name.split()).replace(
         "/", "_").replace("\\", "_")
     ext = extension or Path(original_name).suffix
     return f"{user_id}_{book_id}_{sanitized_name}_{int(time.time())}{ext}"
-
-
-# Helper function to extract cover image
 
 
 def generate_cover_image(book_file_path: str, cover_file_path: str) -> str:
@@ -248,18 +240,14 @@ async def book_details(request: Request, book_id: int):
 @app.get("/download/{book_id}")
 async def download_file(book_id: int):
     from fastapi.responses import FileResponse
-    # Получите информацию о книге из базы данных
     response = await make_request("GET", f"{config.DB_API_URL}/books/{book_id}/")
     book = response.json()
 
-    # Путь к файлу книги
     file_path = book["file_path"]
 
-    # Проверьте, существует ли файл
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Файл не найден")
 
-    # Возвращайте файл для скачивания
     return FileResponse(path=file_path, filename=os.path.basename(file_path), media_type="application/octet-stream")
 
 
@@ -282,18 +270,15 @@ async def edit_book_post(
     title: str = Form(...),
     author: str = Form(...),
     description: str = Form(...),
-    book_file: UploadFile = None,
-    cover_file: UploadFile = None
+    book_file: UploadFile = None
 ):
     user_login = request.cookies.get("username")
     if not user_login:
         raise HTTPException(status_code=401, detail="Authorization required")
 
-    # Получение текущих данных книги
     book_response = await make_request("GET", f"{config.DB_API_URL}/books/{book_id}/")
     book = book_response.json()
 
-    # Путь к книге
     book_path = book["file_path"]
     if book_file:
         book_path = os.path.join(
@@ -304,9 +289,8 @@ async def edit_book_post(
         async with aio_open(book_path, "wb") as f:
             await f.write(await book_file.read())
 
-    # Путь к обложке
     cover_path = book["cover_path"] or os.path.join(
-        "app", "static", "covers",
+        "static", "covers",
         generate_filename(user_login, str(book_id), "cover.jpg")
     )
     if cover_file:
@@ -314,11 +298,9 @@ async def edit_book_post(
         async with aio_open(cover_path, "wb") as f:
             await f.write(await cover_file.read())
     else:
-        # Генерация обложки, если файл книги обновлён или новая обложка не загружена
         if book_file:
             generate_cover_image(book_path, cover_path)
 
-    # Обновление данных в БД
     await make_request("PATCH", f"{config.DB_API_URL}/books/{book_id}/", json={
         "title": title,
         "author": author,
