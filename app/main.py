@@ -22,10 +22,10 @@ app.add_middleware(SessionMiddleware, secret_key=config.SECRET_KEY)
 
 # Configure directories
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 os.makedirs(config.UPLOAD_DIR, exist_ok=True)
 # Ensure covers directory exists
-os.makedirs("app/static/covers", exist_ok=True)
+os.makedirs("static/covers", exist_ok=True)
 
 # Helper function for HTTP requests
 
