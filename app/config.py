@@ -1,3 +1,5 @@
+# Файл конфигурации приложения
+
 class Config:
     """
     Класс конфигурации
@@ -9,6 +11,7 @@ class Config:
     DB_SERVER_PORT = 8001  # Порт сервера базы данных
     DB_API_URL = f"http://{URL}:{DB_SERVER_PORT}"  # URL API базы данных
     MAIN_PORT = 8000  # Порт сервера
+    MAIN_URL = f"http://{URL}:{MAIN_PORT}"  # URL main API
 
 
-config = Config
+config = Config()
