@@ -1,0 +1,9 @@
+p {
+    word-wrap: break-word;
+    white-space: normal;
+}
+
+h1 {
+    word-wrap: break-word;
+
+}

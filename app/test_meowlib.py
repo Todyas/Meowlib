@@ -1,8 +1,6 @@
 import pytest
 import httpx
 
-BASE_URL = "http://127.0.0.1:8000"  # Убедитесь, что сервер запущен
-
 
 @pytest.fixture
 def client():

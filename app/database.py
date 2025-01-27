@@ -1,14 +1,59 @@
+# Библиотеки для общего функционала
 from contextlib import asynccontextmanager
 import os
 import bcrypt
-from fastapi import Depends, FastAPI, HTTPException, Body
+
+# Библиотеки для работы с FastAPI
+from fastapi import FastAPI, HTTPException, Body, Depends
 from fastapi.responses import FileResponse
 from sqlmodel import Field, Relationship, create_engine, SQLModel, Session, select
+
+# Библиотеки для работы с базами данных и моделями
 from typing import Annotated, List, Optional
-from config import config
+from dotenv import load_dotenv
+from pathlib import Path
 
 
-# ================================== Модели ===========================================
+# ===== Конфигурация =====
+
+
+# Загрузка переменных окружения
+load_dotenv()
+
+# Определяем базовую директорию проекта
+BASE_DIR = Path(__file__).resolve().parent  # Теперь только папка app
+print(f"BASE_DIR: {BASE_DIR}")
+
+# Пути относительно app
+UPLOAD_DIR = BASE_DIR / os.getenv("UPLOAD_DIR", "data/uploads")
+DB_DIRECTORY = BASE_DIR / os.getenv("DB_DIRECTORY", "data")
+DB_FILE = os.getenv("DB_FILE", "database.sqlite")
+
+# Конфигурация
+URL = os.getenv("URL", "0.0.0.0")
+SECRET_KEY = os.getenv("SECRET_KEY", "Cheese")
+DB_SERVER_PORT = int(os.getenv("DB_SERVER_PORT", 8001))
+MAIN_PORT = int(os.getenv("MAIN_PORT", 8000))
+
+# Формируем пути для базы данных
+DB_PATH = DB_DIRECTORY / DB_FILE
+DB_URL = f"sqlite:///{DB_PATH.resolve()}"
+DB_DOCKER_URL = f"http://database:{DB_SERVER_PORT}"
+MAIN_DOCKER_URL = f"http://main:{MAIN_PORT}"
+
+# Отладочная информация
+print(f"DB_URL: {DB_URL}")
+print(f"DB_DIRECTORY: {DB_DIRECTORY}")
+print(f"UPLOAD_DIR: {UPLOAD_DIR}")
+
+# Инициализация папок (строго внутри BASE_DIR)
+for directory in [DB_DIRECTORY, UPLOAD_DIR]:
+    # mkdir работает напрямую с Path
+    directory.mkdir(parents=True, exist_ok=True)
+    print(f"Папка создана или уже существует: {directory}")
+
+
+# ===== Инициализация SQLModel =====
 
 
 class UserBase(SQLModel):
@@ -66,13 +111,11 @@ class Book(BookBase, table=True):
         back_populates="books")
 
 
-# ================================== Инициализация ===========================================
+# ===== Инициализация базы данных =====
 
 
-sqlite_url = config.DB_URL
-
-connect_args = {"check_same_thread": False}
-engine = create_engine(sqlite_url, connect_args=connect_args)
+engine = create_engine(DB_URL, connect_args={
+                       "check_same_thread": False})
 
 
 def create_db_and_tables():
@@ -96,20 +139,23 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-# ================================== Функции ===========================================
-
-
 def hash_password(password: str) -> str:
+    '''
+    Функция для хеширования пароля
+    '''
     salt = bcrypt.gensalt()
     hashed_password = bcrypt.hashpw(password.encode('utf-8'), salt)
     return hashed_password.decode('utf-8')
 
 
 def verify_password(password: str, hashed_password: str) -> bool:
+    '''
+    Функция для проверки хэша пароля
+    '''
     return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
 
 
-# ================================== Рутинг ===========================================
+# ===== Маршруты сайта =====
 
 
 @app.post("/users/", response_model=UserRead)
@@ -165,7 +211,7 @@ def read_users(*, session: Session = Depends(get_session)):
 def read_user(*, session: Session = Depends(get_session), user_id: int):
     user = session.get(User, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+        raise HTTPException(status_code=404, detail="User not found")
     return user
 
 
@@ -173,7 +219,7 @@ def read_user(*, session: Session = Depends(get_session), user_id: int):
 def update_user(*, session: Session = Depends(get_session), user_id: int, user: UserCreate):
     db_user = session.get(User, user_id)
     if not db_user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+        raise HTTPException(status_code=404, detail="User not found")
     db_user.username = user.username
     db_user.email = user.email
     db_user.password_hash = user.password
@@ -187,7 +233,7 @@ def update_user(*, session: Session = Depends(get_session), user_id: int, user: 
 def delete_user(*, session: Session = Depends(get_session), user_id: int):
     user = session.get(User, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найдет")
+        raise HTTPException(status_code=404, detail="User not found")
     session.delete(user)
     session.commit()
     return {"ok": True}
@@ -195,20 +241,27 @@ def delete_user(*, session: Session = Depends(get_session), user_id: int):
 
 @app.post("/books/", response_model=BookRead)
 def create_book(*, session: Session = Depends(get_session), book: BookCreate):
-    allowed_extensions = {".pdf", ".epub", ".mobi", ".txt",
-                          ".doc", ".docx", ".rtf"}
-    file_extension = book.file_path.split(".")[-1].lower()
+    allowed_extensions = {
+        ".pdf",
+        ".epub",
+        ".mobi",
+        ".txt",
+        ".doc",
+        ".docx",
+        ".rtf"
+    }
+    file_extension = os.path.splitext(book.file_path)[1].lower()
 
-    if f".{file_extension}" not in allowed_extensions:
+    if file_extension not in allowed_extensions:
         raise HTTPException(
             status_code=400,
-            detail=f"Неверное расширение файла. Поддерживаемые расширения: {
+            detail=f"Wrong file extension. Supported extensions: {
                 ', '.join(allowed_extensions)}"
         )
 
     user = session.get(User, book.user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+        raise HTTPException(status_code=404, detail="User not found")
 
     book_obj = Book(
         title=book.title,
@@ -281,6 +334,7 @@ def read_books_by_user(*, session: Session = Depends(get_session), user_id: int)
     return books
 
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host=config.URL, port=config.DB_SERVER_PORT)
+# Код для запуска
+# if __name__ == '__main__':
+#     import uvicorn
+#     uvicorn.run(app, host=URL, port=DB_SERVER_PORT)

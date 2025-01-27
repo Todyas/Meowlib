@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
+
 <h2>Редактировать книгу</h2>
+
 <form method="post" action="/edit/{{ book.id }}" enctype="multipart/form-data">
     <div class="mb-3">
         <label for="title" class="form-label">Название</label>

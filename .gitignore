@@ -1,3 +1,5 @@
+# Тут файл для игнорирования файлов при загрузки на гитхаб
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -5,6 +7,10 @@ __pycache__/
 
 # C extensions
 *.so
+
+# Custom docker data folders
+data_storage/
+covers_storage/
 
 # Distribution / packaging
 .Python
@@ -32,6 +38,7 @@ MANIFEST
 *.manifest
 *.spec
 
+/app/data/*
 
 /app/static/covers/*
 !/app/static/covers/default.png
@@ -65,7 +72,8 @@ db.sqlite3
 db.sqlite3-journal
 .db
 database.db 
-/app/uploads
+/uploads
+database.sqlite
 
 # Flask stuff:
 instance/

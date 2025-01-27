@@ -1,0 +1,56 @@
+# Исключаем файлы и папки, которые уже игнорируются в .gitignore
+.git
+git/
+.gitignore
+
+# Виртуальные окружения
+.env
+.venv
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Лог-файлы и кеши
+*.log
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+__pycache__
+.cache
+.pytest_cache/
+.hypothesis/
+*.cover
+.coverage
+.coverage.*
+
+# Папки с данными, которые не должны попадать в контейнер
+/app/data/*
+/app/static/covers/*
+!/app/static/covers/default.png
+
+# Тестовые и временные файлы
+tests/
+tmp/
+*.tmp
+
+# Артефакты сборки
+build/
+dist/
+*.egg-info/
+.eggs/
+wheels/
+
+# Docker-файлы и локальные конфиги
+Dockerfile*
+.dockerignore
+
+# Локальные конфиги и IDE
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/

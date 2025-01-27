@@ -1,36 +1,68 @@
+# Библиотеки для общего функционала
 import time
-import ebooklib
-import epub
-from pdf2image import convert_from_path
+import os
+
+# Библиотеки для работы с FastAPI
 from fastapi import FastAPI, HTTPException, Request, Form, UploadFile, Depends
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-import os
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
-from config import config
 from pathlib import Path
-from pdf2image import convert_from_path  # For extracting pages from PDFs
+from dotenv import load_dotenv
 
-# Initialize FastAPI app
+# Библиотеки для работы с книгами
+import ebooklib
+from pdf2image import convert_from_path
+
+
+# ===== Конфигурация =====
+
+
+# Загрузка переменных окружения
+load_dotenv()
+
+# Определяем базовую директорию проекта
+BASE_DIR = Path(__file__).resolve().parent
+
+# Пути относительно app
+UPLOAD_DIR = BASE_DIR / os.getenv("UPLOAD_DIR", "data/uploads")
+DB_DIRECTORY = BASE_DIR / os.getenv("DB_DIRECTORY", "data")
+DB_FILE = os.getenv("DB_FILE", "database.sqlite")
+
+# Конфигурация
+URL = os.getenv("URL", "0.0.0.0")
+SECRET_KEY = os.getenv("SECRET_KEY", "Cheese")
+DB_SERVER_PORT = int(os.getenv("DB_SERVER_PORT", 8001))
+MAIN_PORT = int(os.getenv("MAIN_PORT", 8000))
+
+DB_URL = os.getenv("DB_URL", f"sqlite:///{DB_DIRECTORY}/{DB_FILE}")
+DB_DOCKER_URL = f"http://database:{DB_SERVER_PORT}"
+MAIN_DOCKER_URL = f"http://main:{MAIN_PORT}"
+
+# Инициализация папок
+for directory in [DB_DIRECTORY, UPLOAD_DIR]:
+    directory.mkdir(parents=True, exist_ok=True)
+
+# Инициализация FastAPI
 app = FastAPI()
 
-# Add middleware
-app.add_middleware(SessionMiddleware, secret_key=config.SECRET_KEY)
+# Инициализация middleware
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+
+# Инициализация шаблонизатора
+templates = Jinja2Templates(directory=BASE_DIR / "templates")
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
 
-# Configure directories
-templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
-app.mount("/static", StaticFiles(directory="static"), name="static")
-os.makedirs(config.UPLOAD_DIR, exist_ok=True)
-# Ensure covers directory exists
-os.makedirs("static/covers", exist_ok=True)
-
-# Helper function for HTTP requests
+# ===== Функции =====
 
 
 async def make_request(method: str, url: str, **kwargs):
+    '''
+    Функция для выполнения HTTP-запросов
+    '''
     import httpx
 
     for _ in range(3):
@@ -46,42 +78,63 @@ async def make_request(method: str, url: str, **kwargs):
     raise HTTPException(status_code=500, detail="External API request failed")
 
 
-def generate_filename(user_id: str, book_id: str, original_name: str, extension: str = None) -> str:
-    sanitized_name = "_".join(original_name.split()).replace(
-        "/", "_").replace("\\", "_")
-    ext = extension or Path(original_name).suffix
-    return f"{user_id}_{book_id}_{sanitized_name}_{int(time.time())}{ext}"
+async def generate_filename(user_id: str, original_name: str, extension: str = None) -> str:
+    '''
+    Функция для генерации уникального имени файла
+    '''
+    ext = extension if extension else Path(original_name).suffix
+    return f"{user_id}_{int(time.time())}{ext}"
 
 
-def generate_cover_image(book_file_path: str, cover_file_path: str) -> str:
-    """
-    Generate a cover image from the first page of a PDF or the first image in an ePub.
-    Save the cover image and return the path. If not successful, return None.
-    """
-    ext = Path(book_file_path).suffix.lower()
+async def generate_cover_image(book_file_path: str, user_id: str) -> str:
+    '''
+    Функция для генерации обложки книги
+    '''
+    COVER_FILENAME = await generate_filename(
+        user_id=user_id,
+        original_name="cover",
+        extension=".jpg"
+    )
+
+    # Пути относительно app
+    STATIC_DIR = BASE_DIR / "static"
+    COVERS_DIR = STATIC_DIR / "covers"
+
+    # Генерация путей
+    STATIC_COVER_PATH = COVERS_DIR / COVER_FILENAME
+    RELATIVE_COVER_PATH = f"/static/covers/{COVER_FILENAME}"
+
     try:
-        if ext == ".pdf":
-            images = convert_from_path(
-                book_file_path, first_page=1, last_page=1)
-            if images:
-                images[0].save(cover_file_path, "JPEG")
-                return cover_file_path
-        elif ext == ".epub":
-            book = epub.read_epub(book_file_path)
-            for item in book.get_items():
-                if item.get_type() == ebooklib.ITEM_IMAGE:
-                    with open(cover_file_path, "wb") as f:
-                        f.write(item.get_content())
-                        print(f"Генерация обложки для файла {
-                              book_file_path} завершена. Сохранено в: {cover_file_path}")
+        if ext := Path(book_file_path).suffix.lower():
+            import asyncio
+            if ext == ".pdf":
+                images = await asyncio.to_thread(convert_from_path,
+                                                 book_file_path, first_page=1, last_page=1)
+                if images:
+                    await asyncio.to_thread(images[0].save, STATIC_COVER_PATH, "JPEG")
+                    return RELATIVE_COVER_PATH
 
-                    return cover_file_path
+            elif ext == ".epub":
+                import aiofiles
+                book = await asyncio.to_thread(ebooklib.epub.read_epub, book_file_path)
+                for item in book.get_items():
+                    if item.get_type() == ebooklib.ITEM_COVER:
+                        async with aiofiles.open(STATIC_COVER_PATH, "wb") as f:
+                            await f.write(item.get_content())
+                            return RELATIVE_COVER_PATH
+
+                for item in book.get_items():
+                    if item.get_type() == ebooklib.ITEM_IMAGE:
+                        async with aiofiles.open(STATIC_COVER_PATH, "wb") as f:
+                            await f.write(item.get_content())
+                            return RELATIVE_COVER_PATH
+
     except Exception as e:
         print(f"[generate_cover_image] Error processing {ext}: {e}")
     return None
 
 
-# =================================== Рутинг ===================================
+# ===== Маршруты сайта =====
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -94,7 +147,7 @@ async def login_post(request: Request, login: str = Form(...), password: str = F
     try:
         response = await make_request(
             "POST",
-            f"{config.DB_API_URL}/users/authenticate/",
+            f"{DB_DOCKER_URL}/users/authenticate/",
             json={"username": login, "password": password}
         )
         response_data = response.json()
@@ -122,7 +175,7 @@ async def registration_get(request: Request):
 @app.post("/registration")
 async def registration_post(request: Request, login: str = Form(...), email: str = Form(...), password: str = Form(...)):
     try:
-        await make_request("POST", f"{config.DB_API_URL}/users/", json={
+        await make_request("POST", f"{DB_DOCKER_URL}/users/", json={
             "username": login,
             "email": email,
             "password": password
@@ -138,18 +191,15 @@ async def registration_post(request: Request, login: str = Form(...), email: str
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    user_login = request.cookies.get("username")  # Получаем логин из куки
-    books = []  # По умолчанию пустой список книг
+    user_login = request.cookies.get("username")
+    books = []
 
     try:
-        # Попытка получить список книг
-        response = await make_request("GET", f"{config.DB_API_URL}/books/")
+        response = await make_request("GET", f"{DB_DOCKER_URL}/books/")
         books = response.json()
     except HTTPException:
-        # Если произошла ошибка — книги остаются пустыми
         pass
 
-    # Передаем в шаблон логин пользователя и книги
     return templates.TemplateResponse("index.html", {
         "request": request,
         "books": books,
@@ -159,10 +209,9 @@ async def index(request: Request):
 
 @app.get("/logout")
 async def logout(request: Request):
-    # Перенаправляем на главную
     response = RedirectResponse(url="/", status_code=303)
-    response.delete_cookie("username")  # Удаляем куки с именем пользователя
-    response.delete_cookie("user_id")  # Удаляем куки с ID пользователя
+    response.delete_cookie("username")
+    response.delete_cookie("user_id")
     return response
 
 
@@ -177,44 +226,36 @@ async def add_book_get(request: Request):
 @app.post("/add_book")
 async def add_book_post(
     request: Request,
-    title: str = Form(...),
+    title: str = Form(None),
     author: str = Form(...),
     description: str = Form(...),
-    book_file: UploadFile = None,
-    cover_file: UploadFile = None
+    book_file: UploadFile = None
 ):
     user_id = request.cookies.get("user_id")
     if not user_id:
         raise HTTPException(status_code=401, detail="Authorization required")
 
-    # Генерим пути
+    if not book_file:
+        raise HTTPException(status_code=400, detail="Book file is required")
+
+    # Если название не указано, генерируем его из имени файла
+    if not title:
+        raw_filename = book_file.filename
+        title = os.path.splitext(raw_filename)[0]
+
+    filename = await generate_filename(user_id, book_file.filename)
     book_path = os.path.join(
-        config.UPLOAD_DIR,
-        generate_filename(user_id, "new", book_file.filename)
-    )
-    cover_path = os.path.join(
-        "app", "static", "covers",
-        generate_filename(user_id, "new", "cover.jpg")
+        UPLOAD_DIR,
+        filename
     )
 
-    # Сохраняем файл книги
     from aiofiles import open as aio_open
     async with aio_open(book_path, "wb") as f:
         await f.write(await book_file.read())
 
-    # Сохраняем или генерируем обложку
-    if cover_file:
-        async with aio_open(cover_path, "wb") as f:
-            await f.write(await cover_file.read())
-    else:
-        generated_cover = generate_cover_image(book_path, cover_path)
-        if generated_cover:
-            cover_path = generated_cover
-        else:
-            cover_path = None
+    cover_path = await generate_cover_image(book_path, user_id)
 
-    # Сохраняем данные в базу
-    await make_request("POST", f"{config.DB_API_URL}/books/", json={
+    await make_request("POST", f"{DB_DOCKER_URL}/books/", json={
         "title": title,
         "author": author,
         "description": description,
@@ -228,7 +269,7 @@ async def add_book_post(
 
 @app.get("/book/{book_id}", response_class=HTMLResponse)
 async def book_details(request: Request, book_id: int):
-    response = await make_request("GET", f"{config.DB_API_URL}/books/{book_id}/")
+    response = await make_request("GET", f"{DB_DOCKER_URL}/books/{book_id}/")
     book = response.json()
     user_login = request.cookies.get("username")
     return templates.TemplateResponse("book.html", {
@@ -240,22 +281,25 @@ async def book_details(request: Request, book_id: int):
 @app.get("/download/{book_id}")
 async def download_file(book_id: int):
     from fastapi.responses import FileResponse
-    response = await make_request("GET", f"{config.DB_API_URL}/books/{book_id}/")
+    response = await make_request("GET", f"{DB_DOCKER_URL}/books/{book_id}/")
     book = response.json()
-
     file_path = book["file_path"]
-
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Файл не найден")
-
     return FileResponse(path=file_path, filename=os.path.basename(file_path), media_type="application/octet-stream")
 
 
 @app.get("/edit/{book_id}", response_class=HTMLResponse)
 async def edit_book_get(request: Request, book_id: int):
-    user_login = request.cookies.get("username")
-    response = await make_request("GET", f"{config.DB_API_URL}/books/{book_id}/")
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Требуется авторизация")
+    response = await make_request("GET", f"{DB_DOCKER_URL}/books/{book_id}/")
     book = response.json()
+    if book["user_id"] != int(user_id):
+        raise HTTPException(
+            status_code=403, detail="Редактирование книги не разрешено")
+    user_login = request.cookies.get("username")
     return templates.TemplateResponse("edit_book.html", {
         "request": request,
         "book": book,
@@ -265,80 +309,64 @@ async def edit_book_get(request: Request, book_id: int):
 
 @app.post("/edit/{book_id}")
 async def edit_book_post(
-    request: Request,
-    book_id: int,
-    title: str = Form(...),
-    author: str = Form(...),
-    description: str = Form(...),
-    book_file: UploadFile = None
-):
-    user_login = request.cookies.get("username")
-    if not user_login:
-        raise HTTPException(status_code=401, detail="Authorization required")
-
-    book_response = await make_request("GET", f"{config.DB_API_URL}/books/{book_id}/")
+        request: Request,
+        book_id: int,
+        title: str = Form(...),
+        author: str = Form(...),
+        description: str = Form(...),
+        book_file: UploadFile = None):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="authorization required")
+    book_response = await make_request("GET", f"{DB_DOCKER_URL}/books/{book_id}/")
     book = book_response.json()
-
+    if book["user_id"] != int(user_id):
+        raise HTTPException(
+            status_code=403, detail="Editing the book is not allowed")
     book_path = book["file_path"]
     if book_file:
-        book_path = os.path.join(
-            config.UPLOAD_DIR,
-            generate_filename(user_login, str(book_id), book_file.filename)
-        )
+        filename = await generate_filename(user_id, book_file.filename)
+        book_path = os.path.join(UPLOAD_DIR, filename)
         from aiofiles import open as aio_open
         async with aio_open(book_path, "wb") as f:
             await f.write(await book_file.read())
-
-    cover_path = book["cover_path"] or os.path.join(
-        "static", "covers",
-        generate_filename(user_login, str(book_id), "cover.jpg")
-    )
-    if cover_file:
-        from aiofiles import open as aio_open
-        async with aio_open(cover_path, "wb") as f:
-            await f.write(await cover_file.read())
-    else:
-        if book_file:
-            generate_cover_image(book_path, cover_path)
-
-    await make_request("PATCH", f"{config.DB_API_URL}/books/{book_id}/", json={
+    cover_path = book["cover_path"]
+    if book_file:
+        cover_path = await generate_cover_image(book_path, user_id)
+    await make_request("PATCH", f"{DB_DOCKER_URL}/books/{book_id}/", json={
         "title": title,
         "author": author,
         "description": description,
         "file_path": book_path,
         "cover_path": cover_path
     })
-
     return RedirectResponse(url="/", status_code=303)
 
 
 @app.get("/delete/{book_id}")
 async def delete_book_route(book_id: int, request: Request):
-    # Проверка авторизации пользователя
     user_id = request.cookies.get("user_id")
     if not user_id:
-        raise HTTPException(status_code=401, detail="Требуется авторизация")
-
-    # Проверить, существует ли книга и принадлежит ли она пользователю
-    response = await make_request("GET", f"{config.DB_API_URL}/books/{book_id}/")
+        raise HTTPException(status_code=401, detail="authorization required")
+    response = await make_request("GET", f"{DB_DOCKER_URL}/books/{book_id}/")
     book = response.json()
     if book["user_id"] != int(user_id):
         raise HTTPException(
-            status_code=403, detail="Удаление книги не разрешено")
-
-    # Удалить книгу из базы данных
-    await make_request("DELETE", f"{config.DB_API_URL}/books/{book_id}/")
-
-    # Удалить файл книги и обложку
-    if os.path.exists(book["file_path"]):
-        os.remove(book["file_path"])
-    if book["cover_path"] and os.path.exists(book["cover_path"]):
-        os.remove(book["cover_path"])
-
+            status_code=403, detail="You don't have permission to delete this book")
+    await make_request("DELETE", f"{DB_DOCKER_URL}/books/{book_id}/")
+    try:
+        if os.path.exists(book["file_path"]):
+            os.remove(book["file_path"])
+        if book["cover_path"]:
+            cover_full_path = os.path.join(
+                "app", book["cover_path"].lstrip('/'))
+            if os.path.exists(cover_full_path):
+                os.remove(cover_full_path)
+    except OSError as e:
+        print(f"Error deleting files: {e}")
     return RedirectResponse(url="/", status_code=303)
 
-
-# Run the application
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host=config.URL, port=config.MAIN_PORT)
+# Код для запуска
+# if __name__ == '__main__':
+#     import uvicorn
+#     uvicorn.run(app, host=URL, port=MAIN_PORT)

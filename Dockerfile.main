@@ -1,0 +1,27 @@
+# Базовый образ Python
+FROM python:3.12-slim
+
+# Устанавливаем рабочую директорию
+WORKDIR /code
+
+# Обновляем систему и удаляем ненужные файлы
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends poppler-utils \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Копируем файл зависимостей приложения
+COPY ./app/REQUIREMENTS.txt .
+
+# Устанавливаем зависимости Python
+RUN pip install --no-cache-dir --upgrade -r REQUIREMENTS.txt
+
+# Копируем остальную часть приложения
+COPY ./app .
+
+# Открываем порт 8000
+EXPOSE 8000
+
+# Запускаем приложение
+CMD ["sh", "-c", "uvicorn main:app --host ${URL:-0.0.0.0} --port ${MAIN_PORT:-8000} --reload"]

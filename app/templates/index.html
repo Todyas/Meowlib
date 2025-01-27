@@ -8,11 +8,11 @@
     <h3 class="text-center">Книг не найдено. <a href="/registration">Зарегистрируйтесь</a> или <a href="/login">
             войдите</a> для добавления книг</h3>
     {% elif books and books|length > 0 %}
-    <div class="row">
+    <div class="row row-cols-1 row-cols-md-3 g-4">
         {% for book in books %}
-        <div class="col-md-4 mb-3">
-            <div class="card h-100 border-0 p-0">
-                <div class="card-body">
+        <div class="col d-flex">
+            <div class="card h-100 w-100 shadow-sm border">
+                <div class="card-body d-flex flex-column">
                     <a href="/book/{{ book.id }}">
                         {% if book.cover_path %}
                         <img src="{{ book.cover_path }}" class="card-img-top" alt="Обложка книги">
@@ -27,7 +27,7 @@
                     {% if book.description %}
                     <p class="card-text">{{ book.description[:100] }}...</p>
                     {% endif %}
-                    <div class="d-flex justify-content-between">
+                    <div class="d-flex justify-content-between mt-auto">
                         <a href="/book/{{ book.id }}" class="btn btn-primary">Подробнее</a>
                         <a href="/edit/{{ book.id }}" class="btn btn-secondary">Редактировать</a>
                     </div>

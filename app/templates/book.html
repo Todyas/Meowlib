@@ -20,24 +20,20 @@
     <button id="delete-button" class="btn btn-danger" onclick="handleDelete('{{ book.id }}')">Удалить</button>
 
     <script>
-        // Обработчик кнопки - выводит "Вы уверены?"
         let deleteConfirmed = false;
 
         function handleDelete(bookId) {
             const button = document.getElementById("delete-button");
 
             if (!deleteConfirmed) {
-                // Меняем текст на кнопке при первом нажатии
                 button.innerText = "Вы уверены?";
                 deleteConfirmed = true;
 
-                // Через 5 секунд возвращаем кнопку в исходное состояние, если пользователь передумал
                 setTimeout(() => {
                     button.innerText = "Удалить";
                     deleteConfirmed = false;
-                }, 5000);
+                }, 2000);
             } else {
-                // Если подтверждение получено, перенаправляем на удаление
                 window.location.href = `/delete/${bookId}`;
             }
         }
