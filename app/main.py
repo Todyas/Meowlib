@@ -1,20 +1,19 @@
 # Библиотеки для общего функционала
-import time
-import os
+import time  # Работа с временем
+import os  # Работа с файлами
 
 # Библиотеки для работы с FastAPI
-from fastapi import FastAPI, HTTPException, Request, Form, UploadFile, Depends
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
-from starlette.middleware.sessions import SessionMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware
-from pathlib import Path
-from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Request, Form, UploadFile  # FastAPI
+from fastapi.responses import HTMLResponse, RedirectResponse  # HTML ответы и редиректы
+from fastapi.templating import Jinja2Templates  # Jinja2 шаблонизатор
+from fastapi.staticfiles import StaticFiles  # Статические файлы (CSS, JS)
+from starlette.middleware.sessions import SessionMiddleware  # Работа с сессиями
+from pathlib import Path  # Работа с путями
+from dotenv import load_dotenv  # Загрузка переменных окружения
 
 # Библиотеки для работы с книгами
-import ebooklib
-from pdf2image import convert_from_path
+import ebooklib  # Работа с EPUB-книгами
+from pdf2image import convert_from_path  # Работа с PDF-книгами
 
 
 # ===== Конфигурация =====
@@ -61,20 +60,31 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
 async def make_request(method: str, url: str, **kwargs):
     '''
-    Функция для выполнения HTTP-запросов
+    Функция для выполнения HTTP-запросов.
     '''
     import httpx
 
+    # Пытаемся выполнить запрос 3 раза
     for _ in range(3):
         try:
+            # Создаем асинхронный HTTP-клиент
             async with httpx.AsyncClient() as client:
+                # Выполняем запрос с указанным методом, URL и параметрами
                 response = await client.request(method, url, **kwargs)
+
+                # Проверяем статус ответа, вызывает ошибку, если статус не 2xx
                 response.raise_for_status()
+
+                # Возвращаем успешный ответ
                 return response
         except httpx.RequestError as e:
+            # Обрабатываем ошибки, связанные с запросом (например, проблемы сети)
             print(f"Request error: {e}")
         except httpx.HTTPStatusError as e:
+            # Обрабатываем ошибки HTTP-статусов (например, 4xx или 5xx)
             print(f"HTTP error: {e}")
+
+    # Если все 3 попытки завершились неудачей, выбрасываем исключение
     raise HTTPException(status_code=500, detail="External API request failed")
 
 
@@ -189,17 +199,22 @@ async def registration_post(request: Request, login: str = Form(...), email: str
         })
 
 
+# Декоратор для определения, какой метод и по какому URL эта функция обрабатывает
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     user_login = request.cookies.get("username")
+    user_id = request.cookies.get("user_id")  # Получаем user_id из cookies
     books = []
 
+    # Отправляем запрос database.py для получения книг
     try:
-        response = await make_request("GET", f"{DB_DOCKER_URL}/books/")
+        # Передаём user_id в запрос
+        response = await make_request("GET", f"{DB_DOCKER_URL}/books/?user_id={user_id}")
         books = response.json()
     except HTTPException:
         pass
 
+    # Передаём данные в шаблон
     return templates.TemplateResponse("index.html", {
         "request": request,
         "books": books,

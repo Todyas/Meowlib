@@ -5,7 +5,6 @@ import bcrypt
 
 # Библиотеки для работы с FastAPI
 from fastapi import FastAPI, HTTPException, Body, Depends
-from fastapi.responses import FileResponse
 from sqlmodel import Field, Relationship, create_engine, SQLModel, Session, select
 
 # Библиотеки для работы с базами данных и моделями
@@ -105,7 +104,6 @@ class BookUpdate(BookBase):
 class Book(BookBase, table=True):
     id: Optional[int] = Field(
         default=None, primary_key=True)
-
     user_id: Optional[int] = Field(default=None, foreign_key="user.id")
     user: Optional[User] = Relationship(
         back_populates="books")
@@ -279,17 +277,15 @@ def create_book(*, session: Session = Depends(get_session), book: BookCreate):
 
 
 @app.get("/books/", response_model=List[BookRead])
-def read_books(*, session: Session = Depends(get_session)):
-    books = session.exec(select(Book)).all()
+def read_books(
+        user_id: Optional[int] = None,
+        session: Session = Depends(get_session)):
+    query = select(Book)
+    if user_id:
+        # Фильтруем книги по user_id
+        query = query.where(Book.user_id == user_id)
+    books = session.exec(query).all()
     return books
-
-
-@app.get("/books/{book_id}/", response_model=BookRead)
-def read_book(*, session: Session = Depends(get_session), book_id: int):
-    book = session.get(Book, book_id)
-    if not book:
-        raise HTTPException(status_code=404, detail="Book not found")
-    return book
 
 
 @app.patch("/books/{book_id}/", response_model=BookRead)
