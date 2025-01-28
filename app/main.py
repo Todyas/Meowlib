@@ -218,7 +218,8 @@ async def index(request: Request):
     return templates.TemplateResponse("index.html", {
         "request": request,
         "books": books,
-        "user_login": user_login
+        "user_login": user_login,
+        "user_id": user_id
     })
 
 
