@@ -91,6 +91,18 @@ services:
       # Количество попыток перед фатальным статусом
       retries: 5
         
+  nginx:
+    image: nginx
+    container_name: nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    ports:
+      - "80:80"
+    depends_on:
+      - main
+    networks:
+      - soap-network
+
 # Определяем именованные тома для хранения данных
 volumes:
   # Том для обложек книг
