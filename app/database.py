@@ -288,6 +288,16 @@ def read_books(
     return books
 
 
+@app.get("/books/{book_id}/", response_model=BookRead)
+def read_book(
+        book_id: int,
+        session: Session = Depends(get_session)):
+    db_book = session.get(Book, book_id)
+    if not db_book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    return db_book
+
+
 @app.patch("/books/{book_id}/", response_model=BookRead)
 def update_book(*, session: Session = Depends(get_session), book_id: int, book: BookUpdate):
     db_book = session.get(Book, book_id)
