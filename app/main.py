@@ -1,4 +1,9 @@
 # Библиотеки для общего функционала
+from pdf2image import convert_from_path
+from ebooklib import epub
+from pathlib import Path
+import asyncio
+import asyncio  # Работа с асинхронностью
 import time  # Работа с временем
 import os  # Работа с файлами
 
@@ -12,7 +17,7 @@ from pathlib import Path  # Работа с путями
 from dotenv import load_dotenv  # Загрузка переменных окружения
 
 # Библиотеки для работы с книгами
-import ebooklib  # Работа с EPUB-книгами
+from ebooklib import epub  # Работа с EPUB-книгами
 from pdf2image import convert_from_path  # Работа с PDF-книгами
 
 
@@ -115,33 +120,42 @@ async def generate_cover_image(book_file_path: str, user_id: str) -> str:
     RELATIVE_COVER_PATH = f"/static/covers/{COVER_FILENAME}"
 
     try:
-        if ext := Path(book_file_path).suffix.lower():
-            import asyncio
-            if ext == ".pdf":
-                images = await asyncio.to_thread(convert_from_path,
-                                                 book_file_path, first_page=1, last_page=1)
-                if images:
-                    await asyncio.to_thread(images[0].save, STATIC_COVER_PATH, "JPEG")
+        ext = Path(book_file_path).suffix.lower()
+        if ext == ".pdf":
+            # Конвертация первой страницы PDF в изображение
+            images = await asyncio.to_thread(
+                convert_from_path, book_file_path, first_page=1, last_page=1
+            )
+            if images:
+                await asyncio.to_thread(images[0].save, STATIC_COVER_PATH, "JPEG")
+                return RELATIVE_COVER_PATH
+
+        elif ext == ".epub":
+            import aiofiles
+            # Чтение EPUB файла
+            book = await asyncio.to_thread(epub.read_epub, book_file_path)
+
+            # Проверяем наличие обложки
+            for item in book.items:
+                if item.media_type == "image/jpeg" and "cover" in item.file_name.lower():
+                    async with aiofiles.open(STATIC_COVER_PATH, "wb") as f:
+                        await f.write(item.content)
                     return RELATIVE_COVER_PATH
 
-            elif ext == ".epub":
-                import aiofiles
-                book = await asyncio.to_thread(ebooklib.epub.read_epub, book_file_path)
-                for item in book.get_items():
-                    if item.get_type() == ebooklib.ITEM_COVER:
-                        async with aiofiles.open(STATIC_COVER_PATH, "wb") as f:
-                            await f.write(item.get_content())
-                            return RELATIVE_COVER_PATH
+            # Если обложка не найдена, ищем первое изображение
+            for item in book.items:
+                if item.media_type.startswith("image/"):
+                    async with aiofiles.open(STATIC_COVER_PATH, "wb") as f:
+                        await f.write(item.content)
+                    return RELATIVE_COVER_PATH
 
-                for item in book.get_items():
-                    if item.get_type() == ebooklib.ITEM_IMAGE:
-                        async with aiofiles.open(STATIC_COVER_PATH, "wb") as f:
-                            await f.write(item.get_content())
-                            return RELATIVE_COVER_PATH
+        # Если формат не поддерживается
+        raise ValueError("Unsupported book format!")
 
     except Exception as e:
-        print(f"[generate_cover_image] Error processing {ext}: {e}")
-    return None
+        # Логируем ошибку (опционально)
+        print(f"Error while generating cover: {e}")
+        raise e
 
 
 # ===== Маршруты сайта =====
