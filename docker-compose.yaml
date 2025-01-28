@@ -101,7 +101,7 @@ services:
     depends_on:
       - main
     networks:
-      - app-network
+      - soap-network
 
 # Определяем именованные тома для хранения данных
 volumes:
