@@ -347,22 +347,31 @@ async def edit_book_post(
         book_file: UploadFile = None):
     user_id = request.cookies.get("user_id")
     if not user_id:
-        raise HTTPException(status_code=401, detail="authorization required")
+        raise HTTPException(status_code=401, detail="Authorization required")
+
+    # Получение информации о книге
     book_response = await make_request("GET", f"{DB_DOCKER_URL}/books/{book_id}/")
     book = book_response.json()
     if book["user_id"] != int(user_id):
         raise HTTPException(
             status_code=403, detail="Editing the book is not allowed")
+
+    # Установка текущих путей
     book_path = book["file_path"]
-    if book_file:
+    cover_path = book["cover_path"]
+
+    # Проверка загрузки нового файла книги
+    if book_file and book_file.filename:
         filename = await generate_filename(user_id, book_file.filename)
         book_path = os.path.join(UPLOAD_DIR, filename)
         from aiofiles import open as aio_open
         async with aio_open(book_path, "wb") as f:
             await f.write(await book_file.read())
-    cover_path = book["cover_path"]
-    if book_file:
+
+        # Генерация обложки только при обновлении файла
         cover_path = await generate_cover_image(book_path, user_id)
+
+    # Отправка обновленных данных
     await make_request("PATCH", f"{DB_DOCKER_URL}/books/{book_id}/", json={
         "title": title,
         "author": author,
