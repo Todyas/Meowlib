@@ -3,12 +3,12 @@
 {% block title %}Главная{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="container-fluid mt-4">
     {% if user_login == None %}
     <h3 class="text-center">Книг не найдено. <a href="/registration">Зарегистрируйтесь</a> или <a href="/login">
             войдите</a> для добавления книг</h3>
     {% elif books and books|length > 0 %}
-    <div class="row row-cols-1 row-cols-md-3 g-4">
+    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-4">
         {% for book in books %}
         <div class="col d-flex">
             <div class="card h-100 w-100 shadow-sm border">

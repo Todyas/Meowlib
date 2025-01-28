@@ -1,25 +1,27 @@
 {% extends "base.html" %}
 {% block content %}
 {% if error %}
-<div class="alert alert-danger col-6 offset-3" role="alert">
+<div class="alert alert-danger text-center col-md-6 col-lg-4 mx-auto" role="alert">
     {{ error }}
 </div>
 {% endif %}
 
-<div class="raw">
-
-    <form method="post" action="/login">
-        <h2 class="col-6 offset-3 mb-3">Вход</h2>
-        <div class="col-6 offset-3">
-
-            <label for="login" class="form-label">Логин</label>
-            <input type="text" class="form-control" name="login" id="login" required>
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-4">
+            <form method="post" action="/login">
+                <h2 class="text-center mb-3">Вход</h2>
+                <div class="mb-3">
+                    <label for="login" class="form-label">Логин</label>
+                    <input type="text" class="form-control" name="login" id="login" required>
+                </div>
+                <div class="mb-3">
+                    <label for="password" class="form-label">Пароль</label>
+                    <input type="password" class="form-control" name="password" id="password" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100 mt-4">Войти</button>
+            </form>
         </div>
-        <div class="col-6 offset-3">
-            <label for="password" class="form-label">Пароль</label>
-            <input type="password" class="form-control" name="password" id="password" required>
-        </div>
-        <button type="submit" class="btn btn-primary col-6 offset-3 mt-4 mb-4">Войти</button>
-    </form>
+    </div>
 </div>
 {% endblock %}
