@@ -7,6 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Meowlib - бесплатная онлайн-библиотека книг в удобном формате">
     <meta property="og:title" content="Meowlib">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <meta property="og:description" content="Meowlib - Книжная онлайн-библиотека">
     <meta property="og:image" content="http://meowlib.online/static/img/logo.ico">
     <meta property="og:url" content="http://meowlib.online">
@@ -46,22 +47,23 @@
 </head>
 
 <body>
-    <nav class="navbar navbar-expand-lg">
+    <nav class="navbar navbar-expand-lg navbar-light bg-light" data-bs-theme="light">
         <div class="container-xl">
             <a class="navbar-brand" href="/">
                 <img src="/static/img/logo.jpg" width="35" height="35" alt="meowlib.online" loading="lazy">
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
-            <div class="collapse navbar-collapse justify-content-center" id="navbarNav">
+            <div class="collapse navbar-collapse w-100" id="navbarNav">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     <li class="nav-item"><a class="nav-link" href="/">Главная</a></li>
                     {% if user_login %}
                     <li class="nav-item"><a class="nav-link" href="/add_book">Добавить книгу</a></li>
                     {% endif %}
                 </ul>
-                <div class="d-flex justify-content-center">
+                <div class="d-flex">
                     <button class="btn btn-outline-secondary me-2" onclick="toggleTheme()">🌓</button>
                     {% if user_login %}
                     <span class="navbar-text me-2">Привет, {{ user_login }}</span>
