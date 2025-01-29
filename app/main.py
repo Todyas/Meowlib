@@ -7,6 +7,7 @@ import asyncio  # Работа с асинхронностью
 import time  # Работа с временем
 import os  # Работа с файлами
 import logging  # Работа с логами
+import redis  # Работа с Redis
 
 # Библиотеки для работы с FastAPI
 from fastapi import FastAPI, HTTPException, Request, Form, UploadFile  # FastAPI
@@ -388,27 +389,27 @@ redis_client = redis.StrictRedis(
     host="redis", port=6379, decode_responses=True)
 
 
-@app.post("/password/reset/")
-async def reset_password(email: str = Body(...), session: AsyncSession = Depends(get_session)):
-    """Запрос на сброс пароля"""
-    user = await session.execute(select(User).where(User.email == email))
-    user = user.scalars().first()
+# @app.post("/password/reset/")
+# async def reset_password(email: str = Body(...), session: AsyncSession = Depends(get_session)):
+#     """Запрос на сброс пароля"""
+#     user = await session.execute(select(User).where(User.email == email))
+#     user = user.scalars().first()
 
-    if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+#     if not user:
+#         raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-    # Генерация ссылки для сброса пароля (заглушка)
-    reset_link = f"http://localhost:8000/password/reset/{user.id}"
+#     # Генерация ссылки для сброса пароля (заглушка)
+#     reset_link = f"http://localhost:8000/password/reset/{user.id}"
 
-    # Отправка сообщения в Redis
-    email_data = {
-        "to": email,
-        "subject": "🔐 Сброс пароля",
-        "message": f"Привет, {user.username}! Используйте эту ссылку для сброса пароля: {reset_link}"
-    }
-    redis_client.publish("mail_queue", json.dumps(email_data))
+#     # Отправка сообщения в Redis
+#     email_data = {
+#         "to": email,
+#         "subject": "🔐 Сброс пароля",
+#         "message": f"Привет, {user.username}! Используйте эту ссылку для сброса пароля: {reset_link}"
+#     }
+#     redis_client.publish("mail_queue", json.dumps(email_data))
 
-    return {"message": "📩 Ссылка для сброса пароля отправлена на email"}
+#     return {"message": "📩 Ссылка для сброса пароля отправлена на email"}
 
 # Код для запуска
 # if __name__ == '__main__':
