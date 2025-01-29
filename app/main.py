@@ -2,14 +2,16 @@
 from pdf2image import convert_from_path
 from ebooklib import epub
 from pathlib import Path
-import asyncio
+import aiofiles
 import asyncio  # Работа с асинхронностью
 import time  # Работа с временем
 import os  # Работа с файлами
+import logging  # Работа с логами
 
 # Библиотеки для работы с FastAPI
 from fastapi import FastAPI, HTTPException, Request, Form, UploadFile  # FastAPI
-from fastapi.responses import HTMLResponse, RedirectResponse  # HTML ответы и редиректы
+# HTML ответы и редиректы
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates  # Jinja2 шаблонизатор
 from fastapi.staticfiles import StaticFiles  # Статические файлы (CSS, JS)
 from starlette.middleware.sessions import SessionMiddleware  # Работа с сессиями
@@ -19,16 +21,20 @@ from dotenv import load_dotenv  # Загрузка переменных окру
 # Библиотеки для работы с книгами
 from ebooklib import epub  # Работа с EPUB-книгами
 from pdf2image import convert_from_path  # Работа с PDF-книгами
-
+import httpx  # Работа с HTTP-запросами
 
 # ===== Конфигурация =====
 
+
+# Логирование
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s - %(levelname)s - %(message)s")
 
 # Загрузка переменных окружения
 load_dotenv()
 
 # Определяем базовую директорию проекта
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(os.getcwd()).resolve()
 
 # Пути относительно app
 UPLOAD_DIR = BASE_DIR / os.getenv("UPLOAD_DIR", "data/uploads")
@@ -63,34 +69,36 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 # ===== Функции =====
 
 
-async def make_request(method: str, url: str, **kwargs):
-    '''
-    Функция для выполнения HTTP-запросов.
-    '''
-    import httpx
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    '''Обработчик ошибок HTTP'''
+    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
 
-    # Пытаемся выполнить запрос 3 раза
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    '''Глобальный обработчик неожиданных ошибок'''
+    logging.error(f"Unexpected error: {exc}")
+    return JSONResponse(status_code=500, content={"error": "Server error"})
+
+
+async def make_request(method: str, url: str, **kwargs):
+    """Функция для выполнения HTTP-запросов с повторными попытками"""
     for _ in range(3):
         try:
-            # Создаем асинхронный HTTP-клиент
             async with httpx.AsyncClient() as client:
-                # Выполняем запрос с указанным методом, URL и параметрами
                 response = await client.request(method, url, **kwargs)
-
-                # Проверяем статус ответа, вызывает ошибку, если статус не 2xx
                 response.raise_for_status()
-
-                # Возвращаем успешный ответ
                 return response
         except httpx.RequestError as e:
-            # Обрабатываем ошибки, связанные с запросом (например, проблемы сети)
-            print(f"Request error: {e}")
+            logging.error(f"Ошибка запроса: {e}")
         except httpx.HTTPStatusError as e:
-            # Обрабатываем ошибки HTTP-статусов (например, 4xx или 5xx)
-            print(f"HTTP error: {e}")
+            logging.error(f"Ошибка HTTP: {e}")
+            raise HTTPException(
+                status_code=e.response.status_code, detail=e.response.text)
 
-    # Если все 3 попытки завершились неудачей, выбрасываем исключение
-    raise HTTPException(status_code=500, detail="External API request failed")
+    raise HTTPException(
+        status_code=500, detail="Server error while processing request")
 
 
 async def generate_filename(user_id: str, original_name: str, extension: str = None) -> str:
@@ -102,60 +110,31 @@ async def generate_filename(user_id: str, original_name: str, extension: str = N
 
 
 async def generate_cover_image(book_file_path: str, user_id: str) -> str:
-    '''
-    Функция для генерации обложки книги
-    '''
-    COVER_FILENAME = await generate_filename(
-        user_id=user_id,
-        original_name="cover",
-        extension=".jpg"
-    )
-
-    # Пути относительно app
-    STATIC_DIR = BASE_DIR / "static"
-    COVERS_DIR = STATIC_DIR / "covers"
-
-    # Генерация путей
-    STATIC_COVER_PATH = COVERS_DIR / COVER_FILENAME
+    """Генерация обложки для книги"""
+    COVER_FILENAME = await generate_filename(user_id, "cover", ".jpg")
+    STATIC_COVER_PATH = BASE_DIR / "static/covers" / COVER_FILENAME
     RELATIVE_COVER_PATH = f"/static/covers/{COVER_FILENAME}"
 
     try:
         ext = Path(book_file_path).suffix.lower()
         if ext == ".pdf":
-            # Конвертация первой страницы PDF в изображение
-            images = await asyncio.to_thread(
-                convert_from_path, book_file_path, first_page=1, last_page=1
-            )
+            images = await asyncio.to_thread(convert_from_path, book_file_path, first_page=1, last_page=1)
             if images:
                 await asyncio.to_thread(images[0].save, STATIC_COVER_PATH, "JPEG")
                 return RELATIVE_COVER_PATH
 
         elif ext == ".epub":
-            import aiofiles
-            # Чтение EPUB файла
             book = await asyncio.to_thread(epub.read_epub, book_file_path)
-
-            # Проверяем наличие обложки
-            for item in book.items:
-                if item.media_type == "image/jpeg" and "cover" in item.file_name.lower():
-                    async with aiofiles.open(STATIC_COVER_PATH, "wb") as f:
-                        await f.write(item.content)
-                    return RELATIVE_COVER_PATH
-
-            # Если обложка не найдена, ищем первое изображение
             for item in book.items:
                 if item.media_type.startswith("image/"):
                     async with aiofiles.open(STATIC_COVER_PATH, "wb") as f:
                         await f.write(item.content)
                     return RELATIVE_COVER_PATH
 
-        # Если формат не поддерживается
-        raise ValueError("Unsupported book format!")
-
     except Exception as e:
-        # Логируем ошибку (опционально)
-        print(f"Error while generating cover: {e}")
-        raise e
+        logging.error(f"Ошибка генерации обложки: {e}")
+
+    return "/static/img/default_cover.png"
 
 
 # ===== Маршруты сайта =====
@@ -191,49 +170,38 @@ async def login_post(request: Request, login: str = Form(...), password: str = F
 @app.get("/registration", response_class=HTMLResponse)
 async def registration_get(request: Request):
     user_login = request.cookies.get("username")
-    return templates.TemplateResponse("reg.html", {
-        "request": request,
-        "user_login": user_login})
+    return templates.TemplateResponse("reg.html", {"request": request, "user_login": user_login})
 
 
 @app.post("/registration")
 async def registration_post(request: Request, login: str = Form(...), email: str = Form(...), password: str = Form(...)):
+    """Обработка регистрации"""
+    if len(password) < 6:
+        raise HTTPException(
+            status_code=400, detail="Пароль должен содержать минимум 6 символов")
+
     try:
-        await make_request("POST", f"{DB_DOCKER_URL}/users/", json={
-            "username": login,
-            "email": email,
-            "password": password
-        })
+        await make_request("POST", f"{DB_DOCKER_URL}/users/", json={"username": login, "email": email, "password": password})
         return RedirectResponse(url="/login", status_code=303)
     except HTTPException as e:
-        error_message = "Данный логин уже занят" if e.status_code != 400 else e.detail
-        return templates.TemplateResponse("reg.html", {
-            "request": request,
-            "error": error_message
-        })
+        return templates.TemplateResponse("reg.html", {"request": request, "error": e.detail})
 
 
 # Декоратор для определения, какой метод и по какому URL эта функция обрабатывает
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
+    """Главная страница"""
     user_login = request.cookies.get("username")
-    user_id = request.cookies.get("user_id")  # Получаем user_id из cookies
-    books = []
+    user_id = request.cookies.get("user_id")
 
-    # Отправляем запрос database.py для получения книг
     try:
-        # Передаём user_id в запрос
         response = await make_request("GET", f"{DB_DOCKER_URL}/books/?user_id={user_id}")
         books = response.json()
     except HTTPException:
-        pass
+        books = []
 
-    # Передаём данные в шаблон
     return templates.TemplateResponse("index.html", {
-        "request": request,
-        "books": books,
-        "user_login": user_login,
-        "user_id": user_id
+        "request": request, "books": books, "user_login": user_login
     })
 
 
@@ -261,40 +229,51 @@ async def add_book_post(
     description: str = Form(...),
     book_file: UploadFile = None
 ):
+    """Добавление книги"""
     user_id = request.cookies.get("user_id")
+
+    # Проверка авторизации
     if not user_id:
-        raise HTTPException(status_code=401, detail="Authorization required")
+        logging.error("Ошибка: пользователь не авторизован.")
+        raise HTTPException(status_code=401, detail="Вы не авторизованы!")
 
+    # Проверка загружаемого файла
     if not book_file:
-        raise HTTPException(status_code=400, detail="Book file is required")
+        logging.error("Ошибка: файл книги обязателен.")
+        raise HTTPException(status_code=400, detail="Файл книги обязателен.")
 
-    # Если название не указано, генерируем его из имени файла
-    if not title:
-        raw_filename = book_file.filename
-        title = os.path.splitext(raw_filename)[0]
+    try:
+        # Генерация имени файла
+        filename = await generate_filename(user_id, book_file.filename)
+        book_path = UPLOAD_DIR / filename
 
-    filename = await generate_filename(user_id, book_file.filename)
-    book_path = os.path.join(
-        UPLOAD_DIR,
-        filename
-    )
+        # Асинхронное сохранение файла
+        async with aiofiles.open(book_path, "wb") as f:
+            await f.write(await book_file.read())
 
-    from aiofiles import open as aio_open
-    async with aio_open(book_path, "wb") as f:
-        await f.write(await book_file.read())
+        # Генерация обложки
+        cover_path = await generate_cover_image(str(book_path), user_id)
 
-    cover_path = await generate_cover_image(book_path, user_id)
+        # Отправка данных в БД
+        response = await make_request("POST", f"{DB_DOCKER_URL}/books/", json={
+            "title": title or filename,
+            "author": author,
+            "description": description,
+            "file_path": str(book_path),
+            "cover_path": cover_path,
+            "user_id": user_id
+        })
+        response.raise_for_status()
 
-    await make_request("POST", f"{DB_DOCKER_URL}/books/", json={
-        "title": title,
-        "author": author,
-        "description": description,
-        "file_path": book_path,
-        "cover_path": cover_path,
-        "user_id": user_id
-    })
+        return RedirectResponse(url="/", status_code=303)
 
-    return RedirectResponse(url="/", status_code=303)
+    except HTTPException as e:
+        logging.error(f"HTTPException: {e.detail}")
+        return JSONResponse(status_code=e.status_code, content={"error": e.detail})
+
+    except Exception as e:
+        logging.error(f"Ошибка при добавлении книги: {str(e)}")
+        return JSONResponse(status_code=500, content={"error": "Ошибка сервера при обработке запроса"})
 
 
 @app.get("/book/{book_id}", response_class=HTMLResponse)
@@ -404,6 +383,32 @@ async def delete_book_route(book_id: int, request: Request):
     except OSError as e:
         print(f"Error deleting files: {e}")
     return RedirectResponse(url="/", status_code=303)
+
+redis_client = redis.StrictRedis(
+    host="redis", port=6379, decode_responses=True)
+
+
+@app.post("/password/reset/")
+async def reset_password(email: str = Body(...), session: AsyncSession = Depends(get_session)):
+    """Запрос на сброс пароля"""
+    user = await session.execute(select(User).where(User.email == email))
+    user = user.scalars().first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    # Генерация ссылки для сброса пароля (заглушка)
+    reset_link = f"http://localhost:8000/password/reset/{user.id}"
+
+    # Отправка сообщения в Redis
+    email_data = {
+        "to": email,
+        "subject": "🔐 Сброс пароля",
+        "message": f"Привет, {user.username}! Используйте эту ссылку для сброса пароля: {reset_link}"
+    }
+    redis_client.publish("mail_queue", json.dumps(email_data))
+
+    return {"message": "📩 Ссылка для сброса пароля отправлена на email"}
 
 # Код для запуска
 # if __name__ == '__main__':

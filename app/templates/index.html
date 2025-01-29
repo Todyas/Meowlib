@@ -3,29 +3,30 @@
 {% block title %}Главная{% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4">
-    {% if user_login == None %}
-    <h3 class="text-center">Книг не найдено. <a href="/registration">Зарегистрируйтесь</a> или <a href="/login">
-            войдите</a> для добавления книг</h3>
-    {% elif books and books|length > 0 %}
+<div class="container mt-4">
+    {% if not user_login %}
+    <h3 class="text-center">
+        Книг не найдено. <a href="/registration">Зарегистрируйтесь</a> или <a href="/login">войдите</a> для добавления
+        книг.
+    </h3>
+    {% elif books %}
     <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-4">
         {% for book in books %}
         <div class="col d-flex">
             <div class="card h-100 w-100 shadow-sm border">
+                <a href="/book/{{ book.id }}" class="d-block">
+                    <img src="{{ book.cover_path or '/static/covers/default.png' }}" class="card-img-top img-fluid"
+                        alt="Обложка книги">
+                </a>
                 <div class="card-body d-flex flex-column">
-                    <a href="/book/{{ book.id }}">
-                        {% if book.cover_path %}
-                        <img src="{{ book.cover_path }}" class="card-img-top" alt="Обложка книги">
-                        {% else %}
-                        <img src="/static/covers/default.png" class="card-img-top" alt="Обложка книги">
-                        {% endif %}
-                    </a>
-                    <h3 class="card-title">{{ book.title[:30] }}</h3>
+                    <h3 class="card-title text-truncate" title="{{ book.title }}">{{ book.title }}</h3>
                     {% if book.author %}
-                    <h5 class="card-subtitle mb-2 text-muted">{{ book.author[:100] }}</h5>
+                    <h5 class="card-subtitle mb-2 text-muted text-truncate" title="{{ book.author }}">{{ book.author }}
+                    </h5>
                     {% endif %}
                     {% if book.description %}
-                    <p class="card-text">{{ book.description[:100] }}...</p>
+                    <p class="card-text overflow-hidden text-truncate" style="max-height: 3em;">{{ book.description }}
+                    </p>
                     {% endif %}
                     <div class="d-flex justify-content-between mt-auto">
                         <a href="/book/{{ book.id }}" class="btn btn-primary">Подробнее</a>

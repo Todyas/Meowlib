@@ -41,7 +41,7 @@ MANIFEST
 /app/data/*
 
 /app/static/covers/*
-!/app/static/covers/default.png
+!/app/static/covers/default_cover.png
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt

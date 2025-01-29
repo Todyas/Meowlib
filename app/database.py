@@ -1,82 +1,77 @@
-# Библиотеки для общего функционала
+# ===== Библиотеки =====
+
 from contextlib import asynccontextmanager
 import os
 import bcrypt
+import logging
+from typing import Optional, List
 
-# Библиотеки для работы с FastAPI
-from fastapi import FastAPI, HTTPException, Body, Depends
-from sqlmodel import Field, Relationship, create_engine, SQLModel, Session, select
+from fastapi import FastAPI, HTTPException, Body, Depends, Path
+from sqlmodel import Field, Relationship, SQLModel, select
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
+from typing import AsyncGenerator
 
-# Библиотеки для работы с базами данных и моделями
-from typing import Annotated, List, Optional
 from dotenv import load_dotenv
-from pathlib import Path
-
+import pathlib
 
 # ===== Конфигурация =====
 
+# Логирование
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s - %(levelname)s - %(message)s")
 
 # Загрузка переменных окружения
 load_dotenv()
 
-# Определяем базовую директорию проекта
-BASE_DIR = Path(__file__).resolve().parent  # Теперь только папка app
-print(f"BASE_DIR: {BASE_DIR}")
-
-# Пути относительно app
+# Пути проекта
+BASE_DIR = pathlib.Path(os.getcwd()).resolve()
 UPLOAD_DIR = BASE_DIR / os.getenv("UPLOAD_DIR", "data/uploads")
 DB_DIRECTORY = BASE_DIR / os.getenv("DB_DIRECTORY", "data")
 DB_FILE = os.getenv("DB_FILE", "database.sqlite")
 
-# Конфигурация
-URL = os.getenv("URL", "0.0.0.0")
-SECRET_KEY = os.getenv("SECRET_KEY", "Cheese")
-DB_SERVER_PORT = int(os.getenv("DB_SERVER_PORT", 8001))
-MAIN_PORT = int(os.getenv("MAIN_PORT", 8000))
-
-# Формируем пути для базы данных
+# Подключение базы данных
 DB_PATH = DB_DIRECTORY / DB_FILE
-DB_URL = f"sqlite:///{DB_PATH.resolve()}"
-DB_DOCKER_URL = f"http://database:{DB_SERVER_PORT}"
-MAIN_DOCKER_URL = f"http://main:{MAIN_PORT}"
+DB_URL = f"sqlite+aiosqlite:///{DB_PATH.resolve()}"
 
-# Отладочная информация
-print(f"DB_URL: {DB_URL}")
-print(f"DB_DIRECTORY: {DB_DIRECTORY}")
-print(f"UPLOAD_DIR: {UPLOAD_DIR}")
-
-# Инициализация папок (строго внутри BASE_DIR)
+# Создание директорий
 for directory in [DB_DIRECTORY, UPLOAD_DIR]:
-    # mkdir работает напрямую с Path
     directory.mkdir(parents=True, exist_ok=True)
-    print(f"Папка создана или уже существует: {directory}")
+
+# Создание асинхронного движка SQLAlchemy
+engine = create_async_engine(DB_URL, echo=False, future=True)
+async_session = sessionmaker(
+    engine, expire_on_commit=False, class_=AsyncSession)
 
 
-# ===== Инициализация SQLModel =====
+# ===== Определение моделей =====
 
 
 class UserBase(SQLModel):
+    """Базовая модель пользователя"""
     username: str = Field(index=True, unique=True)
     email: str = Field(index=True, unique=True)
 
 
 class UserCreate(UserBase):
+    """Модель для создания пользователя"""
     password: str
 
 
 class UserRead(UserBase):
+    """Модель для чтения пользователя"""
     id: int
 
 
 class User(UserBase, table=True):
-    id: Optional[int] = Field(
-        default=None, primary_key=True)
+    """Модель пользователя в БД"""
+    id: Optional[int] = Field(default=None, primary_key=True)
     password_hash: str
-    books: List["Book"] = Relationship(
-        back_populates="user")
+    books: List["Book"] = Relationship(back_populates="user")
 
 
 class BookBase(SQLModel):
+    """Базовая модель книги"""
     title: str = Field(index=True)
     author: Optional[str]
     description: Optional[str]
@@ -85,262 +80,177 @@ class BookBase(SQLModel):
 
 
 class BookCreate(BookBase):
+    """Модель для создания книги"""
     user_id: int
 
 
 class BookRead(BookBase):
+    """Модель для чтения книги"""
     id: int
     user_id: int
 
 
-class BookUpdate(BookBase):
+class BookUpdate(SQLModel):
+    """Модель для обновления книги"""
     title: Optional[str] = None
     author: Optional[str] = None
     description: Optional[str] = None
     file_path: Optional[str] = None
     cover_path: Optional[str] = None
+    user_id: Optional[int] = None
 
 
 class Book(BookBase, table=True):
-    id: Optional[int] = Field(
-        default=None, primary_key=True)
+    """Модель книги в БД"""
+    id: Optional[int] = Field(default=None, primary_key=True)
     user_id: Optional[int] = Field(default=None, foreign_key="user.id")
-    user: Optional[User] = Relationship(
-        back_populates="books")
+    user: Optional[User] = Relationship(back_populates="books")
 
 
-# ===== Инициализация базы данных =====
+# ===== Управление БД =====
+
+async def create_db_and_tables():
+    """Создание таблиц в базе данных"""
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(SQLModel.metadata.create_all)
+        logging.info("✅ Таблицы успешно созданы!")
+    except Exception as e:
+        logging.error(f"❌ Ошибка при создании таблиц: {str(e)}")
+        raise
 
 
-engine = create_engine(DB_URL, connect_args={
-                       "check_same_thread": False})
-
-
-def create_db_and_tables():
-    SQLModel.metadata.create_all(engine)
-
-
-def get_session():
-    with Session(engine) as session:
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    """Получение асинхронной сессии"""
+    async with async_session() as session:
         yield session
 
 
-SessionDep = Annotated[Session, Depends(get_session)]
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    create_db_and_tables()
-    yield
-
-
-app = FastAPI(lifespan=lifespan)
+# ===== Хеширование паролей =====
 
 
 def hash_password(password: str) -> str:
-    '''
-    Функция для хеширования пароля
-    '''
+    """Хеширует пароль с солью"""
     salt = bcrypt.gensalt()
     hashed_password = bcrypt.hashpw(password.encode('utf-8'), salt)
     return hashed_password.decode('utf-8')
 
 
 def verify_password(password: str, hashed_password: str) -> bool:
-    '''
-    Функция для проверки хэша пароля
-    '''
+    """Проверяет соответствие пароля и хэша"""
     return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
 
 
-# ===== Маршруты сайта =====
+# ===== FastAPI =====
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Запуск FastAPI с инициализацией БД"""
+    await create_db_and_tables()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+# ===== Маршруты =====
 
 
 @app.post("/users/", response_model=UserRead)
-def create_user(*, session: Session = Depends(get_session), user: UserCreate):
-    db_user = session.exec(select(User).where(
-        User.username == user.username)).first()
-    if db_user:
+async def create_user(user: UserCreate, session: AsyncSession = Depends(get_session)):
+    """Создание нового пользователя"""
+    existing_user = await session.execute(select(User).where(User.username == user.username))
+    if existing_user.scalars().first():
         raise HTTPException(
-            status_code=400, detail="Username already registered"
-        )
+            status_code=400, detail="Пользователь уже зарегистрирован")
+
     hashed_password = hash_password(user.password)
-    user_obj = User(username=user.username, email=user.email,
+    new_user = User(username=user.username, email=user.email,
                     password_hash=hashed_password)
-    session.add(user_obj)
-    session.commit()
-    session.refresh(user_obj)
-    return user_obj
+
+    session.add(new_user)
+    await session.commit()
+    await session.refresh(new_user)
+
+    return new_user
 
 
 @app.post("/users/authenticate/")
-async def authenticate_user(
-    *,
-    session: Session = Depends(get_session),
-    username: str = Body(..., embed=True),
-    password: str = Body(..., embed=True)
-):
-    db_user = session.exec(select(User).where(
-        User.username == username)).first()
-    if not db_user:
+async def authenticate_user(username: str = Body(...), password: str = Body(...), session: AsyncSession = Depends(get_session)):
+    """Аутентификация пользователя"""
+    query = await session.execute(select(User).where(User.username == username))
+    db_user = query.scalars().first()
+
+    if not db_user or not verify_password(password, db_user.password_hash):
         raise HTTPException(
-            status_code=401, detail="Incorrect username or password"
-        )
+            status_code=401, detail="Неверный логин или пароль")
 
-    if not verify_password(password, db_user.password_hash):
-        raise HTTPException(
-            status_code=401, detail="Incorrect username or password"
-        )
-
-    return {
-        "message": "Authentication successful",
-        "user_id": db_user.id,
-        "username": db_user.username
-    }
-
-
-@app.get("/users/", response_model=List[UserRead])
-def read_users(*, session: Session = Depends(get_session)):
-    users = session.exec(select(User)).all()
-    return users
+    return {"message": "Аутентификация успешна", "user_id": db_user.id, "username": db_user.username}
 
 
 @app.get("/users/{user_id}/", response_model=UserRead)
-def read_user(*, session: Session = Depends(get_session), user_id: int):
-    user = session.get(User, user_id)
+async def read_user(user_id: int, session: AsyncSession = Depends(get_session)):
+    """Получение информации о пользователе"""
+    user = await session.get(User, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
     return user
 
 
-@app.patch("/users/{user_id}/", response_model=UserRead)
-def update_user(*, session: Session = Depends(get_session), user_id: int, user: UserCreate):
-    db_user = session.get(User, user_id)
-    if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    db_user.username = user.username
-    db_user.email = user.email
-    db_user.password_hash = user.password
-    session.add(db_user)
-    session.commit()
-    session.refresh(db_user)
-    return db_user
-
-
-@app.delete("/users/{user_id}/")
-def delete_user(*, session: Session = Depends(get_session), user_id: int):
-    user = session.get(User, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    session.delete(user)
-    session.commit()
-    return {"ok": True}
-
-
 @app.post("/books/", response_model=BookRead)
-def create_book(*, session: Session = Depends(get_session), book: BookCreate):
-    allowed_extensions = {
-        ".pdf",
-        ".epub",
-        ".mobi",
-        ".txt",
-        ".doc",
-        ".docx",
-        ".rtf"
-    }
-    file_extension = os.path.splitext(book.file_path)[1].lower()
-
-    if file_extension not in allowed_extensions:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Wrong file extension. Supported extensions: {
-                ', '.join(allowed_extensions)}"
-        )
-
-    user = session.get(User, book.user_id)
+async def create_book(book: BookCreate, session: AsyncSession = Depends(get_session)):
+    """Добавление книги в базу"""
+    user = await session.get(User, book.user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-    book_obj = Book(
-        title=book.title,
-        author=book.author,
-        description=book.description,
-        file_path=book.file_path,
-        user_id=book.user_id,
-        cover_path=book.cover_path
-    )
+    new_book = Book(**book.dict())
 
-    session.add(book_obj)
-    session.commit()
-    session.refresh(book_obj)
-    return book_obj
+    session.add(new_book)
+    await session.commit()
+    await session.refresh(new_book)
+    return new_book
 
 
 @app.get("/books/", response_model=List[BookRead])
-def read_books(
-        user_id: Optional[int] = None,
-        session: Session = Depends(get_session)):
+async def read_books(user_id: Optional[int] = None, session: AsyncSession = Depends(get_session)):
+    """Получение списка книг (по пользователю или всех)"""
     query = select(Book)
-    if user_id:
-        # Фильтруем книги по user_id
+    if user_id is not None:
         query = query.where(Book.user_id == user_id)
-    books = session.exec(query).all()
+
+    result = await session.execute(query)
+    books = result.scalars().all()
     return books
 
 
 @app.get("/books/{book_id}/", response_model=BookRead)
-def read_book(
-        book_id: int,
-        session: Session = Depends(get_session)):
-    db_book = session.get(Book, book_id)
-    if not db_book:
-        raise HTTPException(status_code=404, detail="Book not found")
-    return db_book
+async def read_book(book_id: int, session: AsyncSession = Depends(get_session)):
+    """Получение информации о книге"""
+    book = await session.get(Book, book_id)
+    if not book:
+        raise HTTPException(status_code=404, detail="Книга не найдена")
+    return book
 
 
 @app.patch("/books/{book_id}/", response_model=BookRead)
-def update_book(*, session: Session = Depends(get_session), book_id: int, book: BookUpdate):
-    db_book = session.get(Book, book_id)
+async def update_book(
+    book_id: int = Path(title="ID книги"),  # Убрали `...`
+    book: BookUpdate = Body(...),
+    session: AsyncSession = Depends(get_session)
+):
+    """Обновление информации о книге"""
+    db_book = await session.get(Book, book_id)
     if not db_book:
-        raise HTTPException(status_code=404, detail="Book not found")
+        raise HTTPException(status_code=404, detail="Книга не найдена")
 
-    if book.title is not None:
-        db_book.title = book.title
-    if book.author is not None:
-        db_book.author = book.author
-    if book.description is not None:
-        db_book.description = book.description
-    if book.file_path is not None:
-        db_book.file_path = book.file_path
-    if book.cover_path is not None:
-        db_book.cover_path = book.cover_path
+    update_data = book.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_book, key, value)
 
     session.add(db_book)
-    session.commit()
-    session.refresh(db_book)
+    await session.commit()
+    await session.refresh(db_book)
+
     return db_book
-
-
-@app.delete("/books/{book_id}/")
-def delete_book(*, session: Session = Depends(get_session), book_id: int):
-    book = session.get(Book, book_id)
-    if not book:
-        raise HTTPException(status_code=404, detail="Book not found")
-    session.delete(book)
-    session.commit()
-    return {"ok": True}
-
-
-@app.get("/users/{user_id}/books/", response_model=List[BookRead])
-def read_books_by_user(*, session: Session = Depends(get_session), user_id: int):
-    user = session.get(User, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
-    books = session.exec(select(Book).where(Book.user_id == user_id)).all()
-    return books
-
-
-# Код для запуска
-# if __name__ == '__main__':
-#     import uvicorn
-#     uvicorn.run(app, host=URL, port=DB_SERVER_PORT)

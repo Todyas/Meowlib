@@ -1,0 +1,27 @@
+# Базовый образ Python
+FROM python:3.12-slim
+
+# Устанавливаем рабочую директорию
+WORKDIR /mail
+
+# Обновляем списки пакетов и устанавливаем необходимые утилиты
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Копируем файл зависимостей
+COPY ./app/REQUIREMENTS.txt .
+
+# Устанавливаем зависимости
+RUN pip install --no-cache-dir --upgrade -r REQUIREMENTS.txt
+
+# Копируем остальной код почтового сервиса
+COPY ./app .
+
+# Открываем порт (если понадобится)
+EXPOSE 8025
+
+# Запускаем почтовый сервис
+CMD ["sh", "-c", "python mail.py"]

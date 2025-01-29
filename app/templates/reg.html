@@ -1,41 +1,90 @@
 {% extends "base.html" %}
 {% block content %}
-{% if error %}
-<div class="alert alert-danger text-center col-md-6 col-lg-4 mx-auto" role="alert">
-    {{ error }}
-</div>
-{% endif %}
+
 
 <div class="container">
     <div class="row justify-content-center">
         <div class="col-md-6 col-lg-4">
-            <form method="post" action="/login">
-                <h2 class="text-center mb-3">Вход</h2>
+            <form method="post" action="/registration" id="registerForm">
+                <h2 class="text-center mb-3">Регистрация</h2>
+
+                <div id="errorAlert" class="alert alert-danger text-center d-none"></div>
+
                 <div class="mb-3">
                     <label for="login" class="form-label">Логин</label>
                     <input type="text" class="form-control" name="login" id="login" required>
                 </div>
+
                 <div class="mb-3">
-                    <label for="password" class="form-label">Пароль</label>
-                    <input type="password" class="form-control" name="password" id="password" required>
+                    <label for="email" class="form-label">Email</label>
+                    <input type="email" class="form-control" name="email" id="email" required>
                 </div>
-                <button type="submit" class="btn btn-primary w-100 mt-4">Войти</button>
+
+                <div class="mb-3 position-relative">
+                    <label for="password" class="form-label">Пароль</label>
+                    <div class="input-group">
+                        <input type="password" class="form-control" name="password" id="password" required>
+                        <button class="btn btn-outline-secondary toggle-password" type="button" data-target="password">
+                            👁️
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mb-3 position-relative">
+                    <label for="confirm_password" class="form-label">Подтвердите пароль</label>
+                    <div class="input-group">
+                        <input type="password" class="form-control" name="confirm_password" id="confirm_password"
+                            required>
+                        <button class="btn btn-outline-secondary toggle-password" type="button"
+                            data-target="confirm_password">
+                            👁️
+                        </button>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100 mt-4">Зарегистрироваться</button>
             </form>
         </div>
     </div>
 </div>
-<script>
-    document.addEventListener("DOMContentLoaded", function () {
-        document.querySelector("form").addEventListener("submit", function (event) {
-            let loginInput = document.getElementById("login");
-            let regex = /^[a-zA-Z0-9_]+$/;
 
-            if (!regex.test(loginInput.value)) {
-                event.preventDefault();  // Отменяем отправку формы
-                alert("Логин должен содержать только латинские буквы, цифры и _");
-            }
+<script>
+    // Переключение видимости паролей
+    document.querySelectorAll('.toggle-password').forEach(button => {
+        button.addEventListener('click', function () {
+            let input = document.getElementById(this.getAttribute('data-target'));
+            input.type = input.type === 'password' ? 'text' : 'password';
         });
     });
-</script>
 
+    // Валидация формы
+    document.getElementById('registerForm').addEventListener('submit', function (event) {
+        let login = document.getElementById('login').value;
+        let email = document.getElementById('email').value;
+        let password = document.getElementById('password').value;
+        let confirmPassword = document.getElementById('confirm_password').value;
+        let errorAlert = document.getElementById('errorAlert');
+
+        let errorMessage = "";
+        let cyrillicRegex = /[а-яА-ЯЁё]/;
+
+        if (cyrillicRegex.test(login)) {
+            errorMessage = "Логин не должен содержать кириллицу.";
+        } else if (cyrillicRegex.test(email)) {
+            errorMessage = "Email не должен содержать кириллицу.";
+        } else if (cyrillicRegex.test(password)) {
+            errorMessage = "Пароль не должен содержать кириллицу.";
+        } else if (password.length < 6) {
+            errorMessage = "Пароль должен содержать минимум 6 символов.";
+        } else if (password !== confirmPassword) {
+            errorMessage = "Пароли не совпадают.";
+        }
+
+        if (errorMessage) {
+            event.preventDefault(); // Блокируем отправку формы
+            errorAlert.textContent = errorMessage;
+            errorAlert.classList.remove("d-none");
+        }
+    });
+</script>
 {% endblock %}
