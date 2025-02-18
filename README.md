@@ -15,8 +15,8 @@
 
 ## Контакты
 
-- [telegram](https://t.me/TODYASs)
-- [mail](bogdansytin@duck.com)
+- [Telegram](https://t.me/TODYASs)
+- [Почта](bogdansytin@duck.com)
 
 # Благодарности
 
